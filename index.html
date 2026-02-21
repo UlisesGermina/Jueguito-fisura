@@ -122,45 +122,41 @@
       box-shadow: 0 0 20px rgba(255, 255, 0, 0.5);
     }
 
-    #dpad {
+    #joystick {
       display: none;
       position: relative;
-      width: 160px;
-      height: 160px;
+      width: 150px;
+      height: 150px;
       flex-shrink: 0;
-    }
-
-    #dpad .dpad-btn {
-      position: absolute;
-      width: 52px;
-      height: 52px;
-      background: rgba(255, 255, 0, 0.15);
-      border: 2px solid rgba(255, 255, 0, 0.5);
-      border-radius: 10px;
-      color: #ffff00;
-      font-size: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      border-radius: 50%;
+      background: rgba(255, 255, 0, 0.07);
+      border: 2px solid rgba(255, 255, 0, 0.25);
+      touch-action: none;
       user-select: none;
       -webkit-user-select: none;
-      touch-action: manipulation;
-      transition: background 0.05s;
     }
 
-    #dpad .dpad-btn.active {
-      background: rgba(255, 255, 0, 0.4);
+    #joystick-knob {
+      position: absolute;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 38%, rgba(255, 255, 0, 0.45), rgba(255, 255, 0, 0.15));
+      border: 2px solid rgba(255, 255, 0, 0.6);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      transition: box-shadow 0.1s;
+    }
+
+    #joystick.active #joystick-knob {
+      box-shadow: 0 0 16px rgba(255, 255, 0, 0.5);
       border-color: #ffff00;
-      box-shadow: 0 0 12px rgba(255, 255, 0, 0.4);
     }
-
-    #dpad .dpad-up    { top: 0; left: 54px; }
-    #dpad .dpad-down  { bottom: 0; left: 54px; }
-    #dpad .dpad-left  { top: 54px; left: 0; }
-    #dpad .dpad-right { top: 54px; right: 0; }
 
     @media (pointer: coarse) {
-      #dpad { display: block; }
+      #joystick { display: block; }
       .desktop-instructions { display: none; }
     }
 
@@ -182,7 +178,7 @@
         width: calc(100vw - 16px);
         height: auto;
       }
-      #dpad {
+      #joystick {
         margin-top: 6px;
       }
       #overlay h1 { font-size: 28px; }
@@ -227,20 +223,15 @@
         height: auto;
         max-height: calc(100vh - 36px);
       }
-      #dpad {
-        width: 140px;
-        height: 140px;
+      #joystick {
+        width: 130px;
+        height: 130px;
         flex-shrink: 0;
       }
-      #dpad .dpad-btn {
-        width: 44px;
-        height: 44px;
-        font-size: 20px;
+      #joystick-knob {
+        width: 48px;
+        height: 48px;
       }
-      #dpad .dpad-up    { top: 0; left: 48px; }
-      #dpad .dpad-down  { bottom: 0; left: 48px; }
-      #dpad .dpad-left  { top: 48px; left: 0; }
-      #dpad .dpad-right { top: 48px; right: 0; }
       #overlay h1 { font-size: 24px; margin-bottom: 4px; }
       #overlay h2 { font-size: 18px; margin-bottom: 8px; }
       #overlay p { font-size: 12px; margin: 3px 0; padding: 0 10px; }
@@ -264,7 +255,7 @@
           <h1>PAC-RUN</h1>
           <p style="font-size:22px; color:#ffff00; margin-bottom:8px">Dale Theo, vos podés!</p>
           <p class="desktop-instructions">Usá <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> o <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> para moverte</p>
-          <p class="mobile-instructions" style="display:none">Usá los botones para moverte</p>
+          <p class="mobile-instructions" style="display:none">Usá el joystick para moverte</p>
           <p>Comé nuggets para sumar puntos — ¡los baldes de KFC te dan poderes!</p>
           <p>Esquivá los fantasmas, Theo. Vos sabés.</p>
           <p style="color:#ff4444; margin-top:10px">¡No dejes que la pared izquierda te aplaste!</p>
@@ -272,11 +263,8 @@
         </div>
       </div>
     </div>
-    <div id="dpad">
-      <div class="dpad-btn dpad-up" data-dir="ArrowUp">▲</div>
-      <div class="dpad-btn dpad-down" data-dir="ArrowDown">▼</div>
-      <div class="dpad-btn dpad-left" data-dir="ArrowLeft">◀</div>
-      <div class="dpad-btn dpad-right" data-dir="ArrowRight">▶</div>
+    <div id="joystick">
+      <div id="joystick-knob"></div>
     </div>
   </div>
 
@@ -1163,29 +1151,82 @@
       keys[e.key] = false;
     });
 
-    // D-pad touch controls
+    // Joystick touch controls
     const isMobile = window.matchMedia('(pointer: coarse)').matches;
     if (isMobile) {
       document.querySelectorAll('.mobile-instructions').forEach(el => el.style.display = '');
     }
 
-    document.querySelectorAll('.dpad-btn').forEach(btn => {
-      const dir = btn.dataset.dir;
+    const joystickEl = document.getElementById('joystick');
+    const knobEl = document.getElementById('joystick-knob');
+    let joystickActive = false;
+    let joystickCenter = { x: 0, y: 0 };
+    const JOYSTICK_MAX = 40;
+    const DEADZONE = 8;
 
-      btn.addEventListener('touchstart', e => {
-        e.preventDefault();
-        keys[dir] = true;
-        btn.classList.add('active');
-      });
-      btn.addEventListener('touchend', e => {
-        e.preventDefault();
-        keys[dir] = false;
-        btn.classList.remove('active');
-      });
-      btn.addEventListener('touchcancel', e => {
-        keys[dir] = false;
-        btn.classList.remove('active');
-      });
+    function getJoystickCenter() {
+      const rect = joystickEl.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+
+    function updateJoystick(touchX, touchY) {
+      const dx = touchX - joystickCenter.x;
+      const dy = touchY - joystickCenter.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const clampedDist = Math.min(dist, JOYSTICK_MAX);
+      const angle = Math.atan2(dy, dx);
+      const knobX = Math.cos(angle) * clampedDist;
+      const knobY = Math.sin(angle) * clampedDist;
+
+      knobEl.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
+
+      keys['ArrowUp'] = false;
+      keys['ArrowDown'] = false;
+      keys['ArrowLeft'] = false;
+      keys['ArrowRight'] = false;
+
+      if (dist > DEADZONE) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        if (nx > 0.4) keys['ArrowRight'] = true;
+        if (nx < -0.4) keys['ArrowLeft'] = true;
+        if (ny > 0.4) keys['ArrowDown'] = true;
+        if (ny < -0.4) keys['ArrowUp'] = true;
+      }
+    }
+
+    function resetJoystick() {
+      joystickActive = false;
+      joystickEl.classList.remove('active');
+      knobEl.style.transform = 'translate(-50%, -50%)';
+      keys['ArrowUp'] = false;
+      keys['ArrowDown'] = false;
+      keys['ArrowLeft'] = false;
+      keys['ArrowRight'] = false;
+    }
+
+    joystickEl.addEventListener('touchstart', e => {
+      e.preventDefault();
+      joystickActive = true;
+      joystickCenter = getJoystickCenter();
+      joystickEl.classList.add('active');
+      updateJoystick(e.touches[0].clientX, e.touches[0].clientY);
+    });
+
+    joystickEl.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (joystickActive) {
+        updateJoystick(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    });
+
+    joystickEl.addEventListener('touchend', e => {
+      e.preventDefault();
+      resetJoystick();
+    });
+
+    joystickEl.addEventListener('touchcancel', e => {
+      resetJoystick();
     });
 
     canvas.addEventListener('touchstart', e => e.preventDefault());
