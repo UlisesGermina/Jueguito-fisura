@@ -34,6 +34,7 @@
     #hud {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       width: 800px;
       color: #fff;
       font-size: 20px;
@@ -44,6 +45,21 @@
     #hud span { text-transform: uppercase; letter-spacing: 2px; }
     .hud-val { color: #ffff00; }
 
+    .hud-btn {
+      cursor: pointer;
+      min-width: 44px;
+      min-height: 44px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      background: none;
+      border: none;
+      color: #fff;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
     #canvas-container {
       position: relative;
     }
@@ -53,6 +69,8 @@
       border-radius: 6px;
       display: block;
       background: #000;
+      width: 800px;
+      height: 500px;
     }
 
     #overlay {
@@ -124,22 +142,29 @@
 
     #joystick {
       display: none;
-      position: relative;
-      width: 150px;
-      height: 150px;
-      flex-shrink: 0;
+      position: fixed;
+      width: 180px;
+      height: 180px;
       border-radius: 50%;
       background: rgba(255, 255, 0, 0.07);
       border: 2px solid rgba(255, 255, 0, 0.25);
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.12s;
+      pointer-events: none;
+    }
+
+    #joystick.visible {
+      opacity: 1;
     }
 
     #joystick-knob {
       position: absolute;
-      width: 56px;
-      height: 56px;
+      width: 68px;
+      height: 68px;
       border-radius: 50%;
       background: radial-gradient(circle at 40% 38%, rgba(255, 255, 0, 0.45), rgba(255, 255, 0, 0.15));
       border: 2px solid rgba(255, 255, 0, 0.6);
@@ -155,9 +180,18 @@
       border-color: #ffff00;
     }
 
+    #overlay .share-btn {
+      background: #4444ff;
+      color: #fff;
+      margin-top: 12px;
+      font-size: 16px;
+      padding: 10px 28px;
+    }
+
     @media (pointer: coarse) {
       #joystick { display: block; }
       .desktop-instructions { display: none; }
+      .hud-btn { display: flex; }
     }
 
     /* Portrait mobile */
@@ -178,9 +212,6 @@
         width: calc(100vw - 16px);
         height: auto;
       }
-      #joystick {
-        margin-top: 6px;
-      }
       #overlay h1 { font-size: 28px; }
       #overlay h2 { font-size: 20px; }
       #overlay p { font-size: 13px; padding: 0 10px; }
@@ -195,18 +226,19 @@
         justify-content: center;
       }
       #game-wrapper {
-        flex-direction: row;
+        flex-direction: column;
         align-items: center;
-        gap: 12px;
         height: 100vh;
         width: 100vw;
         padding: 6px;
+        gap: 4px;
       }
       #game-area {
         flex: 1;
         height: 100%;
         justify-content: center;
         min-width: 0;
+        width: 100%;
       }
       #hud {
         width: 100%;
@@ -222,15 +254,6 @@
         width: 100%;
         height: auto;
         max-height: calc(100vh - 36px);
-      }
-      #joystick {
-        width: 130px;
-        height: 130px;
-        flex-shrink: 0;
-      }
-      #joystick-knob {
-        width: 48px;
-        height: 48px;
       }
       #overlay h1 { font-size: 24px; margin-bottom: 4px; }
       #overlay h2 { font-size: 18px; margin-bottom: 8px; }
@@ -248,7 +271,8 @@
         <span>Record: <span class="hud-val" id="hi-score-display">0</span></span>
         <span>Velocidad: <span class="hud-val" id="speed-display">1</span></span>
         <span>Vidas: <span class="hud-val" id="lives-display">♥♥♥</span></span>
-        <span id="pause-btn" style="cursor:pointer; display:none" onclick="togglePause()">⏸</span>
+        <button class="hud-btn" id="mute-btn" onclick="toggleMute()">🔊</button>
+        <button class="hud-btn" id="pause-btn" onclick="togglePause()">⏸</button>
       </div>
       <div id="canvas-container">
         <canvas id="game" width="800" height="500"></canvas>
@@ -261,7 +285,7 @@
           <p>Esquivá los fantasmas, Theo. Vos sabés.</p>
           <p style="color:#ff4444; margin-top:10px">¡No dejes que la pared izquierda te aplaste!</p>
           <p class="desktop-instructions" style="color:#888; margin-top:6px"><span class="key">P</span> o <span class="key">Esc</span> para pausar</p>
-          <p class="mobile-instructions" style="display:none; color:#888; margin-top:6px">Tocá el canvas para pausar</p>
+          <p class="mobile-instructions" style="display:none; color:#888; margin-top:6px">Usá el botón ⏸ para pausar</p>
           <button id="start-btn">Jugar</button>
         </div>
       </div>
@@ -281,8 +305,14 @@
     const speedDisplay = document.getElementById('speed-display');
     const livesDisplay = document.getElementById('lives-display');
 
-    const W = canvas.width;
-    const H = canvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    const W = 800;
+    const H = 500;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
+
+    const isMobile = window.matchMedia('(pointer: coarse)').matches;
 
     const LANE_COUNT = 5;
     const LANE_H = H / LANE_COUNT;
@@ -305,6 +335,38 @@
         mazeBanner, mazeBannerTimer, mazeActive, graceTimer, paused;
 
     const keys = {};
+    const joystickAxis = { x: 0, y: 0 };
+    let lastFrameTime = 0;
+    let muted = false;
+    let sharedAudioCtx = null;
+
+    function getAudioContext() {
+      if (!sharedAudioCtx) {
+        sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (sharedAudioCtx.state === 'suspended') {
+        sharedAudioCtx.resume();
+      }
+      return sharedAudioCtx;
+    }
+
+    function warmAudio() {
+      try {
+        const actx = getAudioContext();
+        const osc = actx.createOscillator();
+        const gain = actx.createGain();
+        gain.gain.setValueAtTime(0, actx.currentTime);
+        osc.connect(gain);
+        gain.connect(actx.destination);
+        osc.start();
+        osc.stop(actx.currentTime + 0.01);
+      } catch (e) {}
+    }
+
+    function toggleMute() {
+      muted = !muted;
+      document.getElementById('mute-btn').textContent = muted ? '🔇' : '🔊';
+    }
 
     function init() {
       state = 'playing';
@@ -335,6 +397,7 @@
       mazeActive = false;
       graceTimer = 90;
       paused = false;
+      lastFrameTime = 0;
 
       pacman = {
         x: 200,
@@ -424,7 +487,8 @@
 
     function spawnMaze() {
       mazeCount++;
-      const gapH = Math.max(72, 100 - mazeCount * 3);
+      let gapH = Math.max(72, 100 - mazeCount * 3);
+      if (isMobile) gapH = Math.floor(gapH * 1.15);
       const colW = 22;
       const baseX = W + 120;
       const walls = [];
@@ -543,15 +607,19 @@
       const friction = 0.82;
       let mx = 0, my = 0;
 
-      if (keys['ArrowUp'] || keys['w'] || keys['W']) my -= 1;
-      if (keys['ArrowDown'] || keys['s'] || keys['S']) my += 1;
-      if (keys['ArrowLeft'] || keys['a'] || keys['A']) mx -= 1;
-      if (keys['ArrowRight'] || keys['d'] || keys['D']) mx += 1;
+      if (isMobile && (joystickAxis.x !== 0 || joystickAxis.y !== 0)) {
+        mx = joystickAxis.x;
+        my = joystickAxis.y;
+      } else {
+        if (keys['ArrowUp'] || keys['w'] || keys['W']) my -= 1;
+        if (keys['ArrowDown'] || keys['s'] || keys['S']) my += 1;
+        if (keys['ArrowLeft'] || keys['a'] || keys['A']) mx -= 1;
+        if (keys['ArrowRight'] || keys['d'] || keys['D']) mx += 1;
+      }
 
       if (mx !== 0 || my !== 0) {
         const len = Math.sqrt(mx * mx + my * my);
-        mx /= len;
-        my /= len;
+        if (len > 1) { mx /= len; my /= len; }
         pacman.facing = Math.atan2(my, mx);
       }
 
@@ -567,8 +635,12 @@
       pacman.x += pacman.vx;
       pacman.y += pacman.vy;
 
-      const drift = Math.min(speed * 0.5, 3.2);
-      pacman.x -= drift;
+      const baseDrift = Math.min(speed * 0.5, 3.2);
+      pacman.x -= isMobile ? baseDrift * 0.85 : baseDrift;
+
+      if (isMobile && pacman.x < 80 && frameCount % 20 === 0) {
+        haptic(15);
+      }
 
       pacman.y = Math.max(PAC_SIZE, Math.min(H - PAC_SIZE, pacman.y));
       pacman.x = Math.min(W - PAC_SIZE, pacman.x);
@@ -589,8 +661,9 @@
     }
 
     function playSound(freq, dur, type, vol) {
+      if (muted) return;
       try {
-        const actx = new (window.AudioContext || window.webkitAudioContext)();
+        const actx = getAudioContext();
         const osc = actx.createOscillator();
         const gain = actx.createGain();
         osc.type = type || 'square';
@@ -615,8 +688,9 @@
       if (graceTimer > 0) graceTimer--;
       difficultyTimer++;
 
-      const maxSpeed = 8.5;
-      speed = 3.5 + (maxSpeed - 3.5) * (1 - Math.exp(-difficultyTimer * 0.0008));
+      const maxSpeed = isMobile ? 7.5 : 8.5;
+      const diffRate = isMobile ? 0.0006 : 0.0008;
+      speed = 3.5 + (maxSpeed - 3.5) * (1 - Math.exp(-difficultyTimer * diffRate));
 
       const newLevel = Math.floor((speed - 3.5) / 1.0) + 1;
       if (newLevel > speedLevel) {
@@ -1074,8 +1148,9 @@
       ctx.save();
 
       if (shakeTimer > 0) {
-        const shakeX = (Math.random() - 0.5) * 8;
-        const shakeY = (Math.random() - 0.5) * 8;
+        const shakeMag = isMobile ? 4 : 8;
+        const shakeX = (Math.random() - 0.5) * shakeMag;
+        const shakeY = (Math.random() - 0.5) * shakeMag;
         ctx.translate(shakeX, shakeY);
       }
 
@@ -1202,7 +1277,7 @@
         ctx.font = '20px "Courier New", monospace';
         ctx.fillStyle = '#ccc';
         ctx.shadowBlur = 0;
-        ctx.fillText('Tocá el canvas o presioná P / Esc', W / 2, H / 2 + 30);
+        ctx.fillText('Tocá ⏸ o presioná P / Esc', W / 2, H / 2 + 30);
       }
 
       ctx.restore();
@@ -1245,6 +1320,7 @@
         ? hiScoreMessages[Math.floor(Math.random() * hiScoreMessages.length)]
         : deathMessages[Math.floor(Math.random() * deathMessages.length)];
 
+      const canShare = navigator.share !== undefined;
       overlay.classList.remove('hidden');
       overlay.innerHTML = `
         <h2>${isNewHiScore ? '🏆 ¡LA ROMPISTE THEO!' : 'TE MORISTE THEO'}</h2>
@@ -1253,29 +1329,48 @@
         <p>Nivel de velocidad: <strong style="color:#ff4444">${speedLevel}</strong></p>
         <p style="color:#66ddff; margin-top:12px; font-style:italic; max-width:90%; line-height:1.4">${msg}</p>
         <button id="restart-btn">Dale de nuevo</button>
+        ${canShare ? '<button class="share-btn" id="share-btn">Compartir puntuación</button>' : ''}
       `;
       document.getElementById('restart-btn').addEventListener('click', () => {
         if (isMobile) tryFullscreen();
         init();
-        loop();
+        requestAnimationFrame(loop);
       });
+      if (canShare) {
+        document.getElementById('share-btn').addEventListener('click', () => {
+          navigator.share({
+            title: 'Pac-Run',
+            text: `¡Hice ${score} puntos en Pac-Run! ¿Podés superarme? 🟡`,
+          }).catch(() => {});
+        });
+      }
     }
 
-    function loop() {
+    function loop(timestamp) {
       if (state !== 'playing') return;
       if (paused) return;
+      if (!timestamp) timestamp = performance.now();
+      if (lastFrameTime > 0) {
+        const elapsed = timestamp - lastFrameTime;
+        if (elapsed < 14) {
+          requestAnimationFrame(loop);
+          return;
+        }
+      }
+      lastFrameTime = timestamp;
+
       update();
       draw();
       requestAnimationFrame(loop);
     }
 
-    // Input
     function togglePause() {
       if (state !== 'playing') return;
       paused = !paused;
       if (!paused) {
+        lastFrameTime = 0;
         draw();
-        loop();
+        requestAnimationFrame(loop);
       } else {
         draw();
       }
@@ -1293,25 +1388,13 @@
       keys[e.key] = false;
     });
 
-    // Joystick touch controls
-    const isMobile = window.matchMedia('(pointer: coarse)').matches;
-    if (isMobile) {
-      document.querySelectorAll('.mobile-instructions').forEach(el => el.style.display = '');
-      const pauseBtn = document.getElementById('pause-btn');
-      if (pauseBtn) pauseBtn.style.display = '';
-    }
-
     const joystickEl = document.getElementById('joystick');
     const knobEl = document.getElementById('joystick-knob');
-    let joystickActive = false;
+    let joystickTouchId = null;
     let joystickCenter = { x: 0, y: 0 };
-    const JOYSTICK_MAX = 40;
-    const DEADZONE = 8;
-
-    function getJoystickCenter() {
-      const rect = joystickEl.getBoundingClientRect();
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    }
+    const JOYSTICK_MAX = 50;
+    const DEADZONE = 15;
+    let wasInDeadzone = true;
 
     function updateJoystick(touchX, touchY) {
       const dx = touchX - joystickCenter.x;
@@ -1324,60 +1407,82 @@
 
       knobEl.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
 
-      keys['ArrowUp'] = false;
-      keys['ArrowDown'] = false;
-      keys['ArrowLeft'] = false;
-      keys['ArrowRight'] = false;
-
       if (dist > DEADZONE) {
-        const nx = dx / dist;
-        const ny = dy / dist;
-        if (nx > 0.4) keys['ArrowRight'] = true;
-        if (nx < -0.4) keys['ArrowLeft'] = true;
-        if (ny > 0.4) keys['ArrowDown'] = true;
-        if (ny < -0.4) keys['ArrowUp'] = true;
+        if (wasInDeadzone) {
+          haptic(8);
+          wasInDeadzone = false;
+        }
+        const normalized = (clampedDist - DEADZONE) / (JOYSTICK_MAX - DEADZONE);
+        joystickAxis.x = (dx / dist) * normalized;
+        joystickAxis.y = (dy / dist) * normalized;
+      } else {
+        wasInDeadzone = true;
+        joystickAxis.x = 0;
+        joystickAxis.y = 0;
       }
     }
 
     function resetJoystick() {
-      joystickActive = false;
-      joystickEl.classList.remove('active');
+      joystickTouchId = null;
+      joystickEl.classList.remove('visible', 'active');
       knobEl.style.transform = 'translate(-50%, -50%)';
-      keys['ArrowUp'] = false;
-      keys['ArrowDown'] = false;
-      keys['ArrowLeft'] = false;
-      keys['ArrowRight'] = false;
+      joystickAxis.x = 0;
+      joystickAxis.y = 0;
+      wasInDeadzone = true;
     }
 
-    joystickEl.addEventListener('touchstart', e => {
-      e.preventDefault();
-      joystickActive = true;
-      joystickCenter = getJoystickCenter();
-      joystickEl.classList.add('active');
-      updateJoystick(e.touches[0].clientX, e.touches[0].clientY);
-    });
+    if (isMobile) {
+      document.querySelectorAll('.mobile-instructions').forEach(el => el.style.display = '');
 
-    joystickEl.addEventListener('touchmove', e => {
-      e.preventDefault();
-      if (joystickActive) {
-        updateJoystick(e.touches[0].clientX, e.touches[0].clientY);
-      }
-    });
+      document.addEventListener('touchstart', e => {
+        if (state !== 'playing' || paused) return;
+        const target = e.target;
+        if (target.closest('#overlay') || target.closest('button') || target.closest('.hud-btn')) return;
+        if (joystickTouchId !== null) return;
 
-    joystickEl.addEventListener('touchend', e => {
-      e.preventDefault();
-      resetJoystick();
-    });
+        const touch = e.changedTouches[0];
+        joystickTouchId = touch.identifier;
+        joystickCenter = { x: touch.clientX, y: touch.clientY };
+        const halfSize = 90;
+        joystickEl.style.left = (touch.clientX - halfSize) + 'px';
+        joystickEl.style.top = (touch.clientY - halfSize) + 'px';
+        joystickEl.classList.add('visible', 'active');
+        updateJoystick(touch.clientX, touch.clientY);
+        e.preventDefault();
+      }, { passive: false });
 
-    joystickEl.addEventListener('touchcancel', e => {
-      resetJoystick();
-    });
+      document.addEventListener('touchmove', e => {
+        if (joystickTouchId === null) return;
+        for (const touch of e.changedTouches) {
+          if (touch.identifier === joystickTouchId) {
+            updateJoystick(touch.clientX, touch.clientY);
+            e.preventDefault();
+            break;
+          }
+        }
+      }, { passive: false });
 
-    canvas.addEventListener('touchstart', e => {
-      e.preventDefault();
-      if (state === 'playing') togglePause();
-    });
-    canvas.addEventListener('touchmove', e => e.preventDefault());
+      document.addEventListener('touchend', e => {
+        for (const touch of e.changedTouches) {
+          if (touch.identifier === joystickTouchId) {
+            resetJoystick();
+            break;
+          }
+        }
+      }, { passive: false });
+
+      document.addEventListener('touchcancel', e => {
+        for (const touch of e.changedTouches) {
+          if (touch.identifier === joystickTouchId) {
+            resetJoystick();
+            break;
+          }
+        }
+      }, { passive: false });
+    }
+
+    canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+    canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
     function tryFullscreen() {
       const el = document.documentElement;
@@ -1389,9 +1494,10 @@
     }
 
     startBtn.addEventListener('click', () => {
+      warmAudio();
       if (isMobile) tryFullscreen();
       init();
-      loop();
+      requestAnimationFrame(loop);
     });
   </script>
 </body>
