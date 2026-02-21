@@ -454,143 +454,140 @@
     })();
     function nf(note) { return NOTE_FREQS[note] || 440; }
 
-    // E minor pentatonic / natural minor for urgency
+    // Pre-cached noise buffers (created once, reused every bar)
+    let snareNoiseBuf = null, hhClosedBuf = null, hhOpenBuf = null;
+    function ensureNoiseBuffers(actx) {
+      if (snareNoiseBuf) return;
+      const sr = actx.sampleRate;
+      function makeBuf(dur) {
+        const len = Math.floor(sr * dur);
+        const buf = actx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        return buf;
+      }
+      snareNoiseBuf = makeBuf(0.08);
+      hhClosedBuf = makeBuf(0.03);
+      hhOpenBuf = makeBuf(0.08);
+    }
+
+    // 8-step patterns (quarter + eighth notes, 8 steps per bar)
     const BASS_PATTERNS = [
-      ['E2','E2','E2','G2','A2','A2','B2','B2',  'E2','E2','G2','G2','A2','B2','A2','G2'],
-      ['E2','E2','B2','B2','C3','C3','B2','A2',  'G2','G2','A2','A2','B2','E2','E2','E2'],
-      ['A2','A2','A2','C3','B2','B2','E2','E2',  'G2','A2','B2','B2','A2','G2','E2','E2'],
+      ['E2','G2','A2','B2','E2','G2','A2','G2'],
+      ['E2','B2','C3','B2','G2','A2','B2','E2'],
+      ['A2','C3','B2','E2','G2','B2','A2','E2'],
     ];
     const LEAD_PATTERNS = [
-      ['E4','G4','B4','E5','D5','B4','G4','A4',  'B4','D5','E5','D5','B4','A4','G4','E4'],
-      ['B4','D5','E5','G5','E5','D5','B4','A4',  'G4','A4','B4','D5','E5','D5','B4','G4'],
-      ['E5','D5','B4','G4','A4','B4','D5','E5',  'G5','E5','D5','B4','A4','G4','E4','G4'],
+      ['E4','B4','D5','B4','G4','B4','D5','E4'],
+      ['B4','E5','D5','A4','G4','B4','E5','G4'],
+      ['E5','B4','A4','D5','G5','D5','B4','G4'],
     ];
-    const POWER_LEAD = ['E5','G5','B5','E6','D6','B5','G5','A5', 'B5','D6','E6','G6','E6','D6','B5','G5'];
+    const POWER_LEAD = ['E5','B5','E6','B5','G5','D6','E6','G5'];
     const ARP_CHORDS = [
       ['E4','G4','B4'],['A3','C4','E4'],['B3','D4','F#4'],['G3','B3','D4'],
-      ['E4','G4','B4'],['C4','E4','G4'],['D4','F#4','A4'],['B3','D4','F#4'],
     ];
 
-    // 16-step drum patterns (1=hit, 0=rest)
-    const KICK_PAT  = [1,0,0,0, 1,0,0,0, 1,0,0,1, 0,0,1,0];
-    const SNARE_PAT = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0];
-    const HH_PAT    = [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0];
-    const HH_OPEN   = [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1];
+    // 8-step drum patterns
+    const KICK_PAT  = [1,0,0,0, 1,0,1,0];
+    const SNARE_PAT = [0,0,1,0, 0,0,1,0];
+    const HH_PAT    = [1,1,1,1, 1,1,1,1];
 
     let musicBarIndex = 0;
 
-    function chipNote(actx, freq, time, dur, type, vol, detune) {
-      const osc = actx.createOscillator();
-      const g = actx.createGain();
-      osc.type = type || 'square';
-      osc.frequency.setValueAtTime(freq, time);
-      if (detune) osc.detune.setValueAtTime(detune, time);
-      g.gain.setValueAtTime(vol, time);
-      g.gain.setValueAtTime(vol * 0.8, time + dur * 0.7);
-      g.gain.exponentialRampToValueAtTime(0.001, time + dur);
-      osc.connect(g); g.connect(actx.destination);
-      osc.start(time); osc.stop(time + dur + 0.01);
+    function chipNote(actx, freq, time, dur, type, vol) {
+      try {
+        const osc = actx.createOscillator();
+        const g = actx.createGain();
+        osc.type = type || 'square';
+        osc.frequency.setValueAtTime(freq, time);
+        g.gain.setValueAtTime(vol, time);
+        g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+        osc.connect(g); g.connect(actx.destination);
+        osc.start(time); osc.stop(time + dur + 0.02);
+      } catch (e) {}
     }
 
     function chipKick(actx, time) {
-      const osc = actx.createOscillator();
-      const g = actx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(160, time);
-      osc.frequency.exponentialRampToValueAtTime(25, time + 0.12);
-      g.gain.setValueAtTime(0.22, time);
-      g.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
-      osc.connect(g); g.connect(actx.destination);
-      osc.start(time); osc.stop(time + 0.15);
+      try {
+        const osc = actx.createOscillator();
+        const g = actx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, time);
+        osc.frequency.exponentialRampToValueAtTime(25, time + 0.12);
+        g.gain.setValueAtTime(0.20, time);
+        g.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+        osc.connect(g); g.connect(actx.destination);
+        osc.start(time); osc.stop(time + 0.15);
+      } catch (e) {}
     }
 
     function chipSnare(actx, time) {
-      const bufSize = actx.sampleRate * 0.08;
-      const buf = actx.createBuffer(1, bufSize, actx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1;
-      const src = actx.createBufferSource(); src.buffer = buf;
-      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 4000;
-      const g = actx.createGain();
-      g.gain.setValueAtTime(0.11, time);
-      g.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
-      src.connect(bp); bp.connect(g); g.connect(actx.destination);
-      src.start(time); src.stop(time + 0.09);
-      const osc = actx.createOscillator();
-      const g2 = actx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(200, time);
-      osc.frequency.exponentialRampToValueAtTime(80, time + 0.06);
-      g2.gain.setValueAtTime(0.08, time);
-      g2.gain.exponentialRampToValueAtTime(0.001, time + 0.06);
-      osc.connect(g2); g2.connect(actx.destination);
-      osc.start(time); osc.stop(time + 0.07);
+      try {
+        const src = actx.createBufferSource(); src.buffer = snareNoiseBuf;
+        const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 4000;
+        const g = actx.createGain();
+        g.gain.setValueAtTime(0.10, time);
+        g.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+        src.connect(bp); bp.connect(g); g.connect(actx.destination);
+        src.start(time); src.stop(time + 0.09);
+      } catch (e) {}
     }
 
     function chipHihat(actx, time, open) {
-      const dur = open ? 0.08 : 0.03;
-      const vol = open ? 0.05 : 0.035;
-      const bufSize = actx.sampleRate * dur;
-      const buf = actx.createBuffer(1, bufSize, actx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1;
-      const src = actx.createBufferSource(); src.buffer = buf;
-      const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 8000;
-      const g = actx.createGain();
-      g.gain.setValueAtTime(vol, time);
-      g.gain.exponentialRampToValueAtTime(0.001, time + dur);
-      src.connect(hp); hp.connect(g); g.connect(actx.destination);
-      src.start(time); src.stop(time + dur + 0.01);
+      try {
+        const buf = open ? hhOpenBuf : hhClosedBuf;
+        const dur = open ? 0.08 : 0.03;
+        const vol = open ? 0.04 : 0.025;
+        const src = actx.createBufferSource(); src.buffer = buf;
+        const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 8000;
+        const g = actx.createGain();
+        g.gain.setValueAtTime(vol, time);
+        g.gain.exponentialRampToValueAtTime(0.001, time + dur);
+        src.connect(hp); hp.connect(g); g.connect(actx.destination);
+        src.start(time); src.stop(time + dur + 0.01);
+      } catch (e) {}
     }
 
     function scheduleBar() {
       if (!musicPlaying || muted) return;
       try {
         const actx = getAudioContext();
+        if (actx.state === 'suspended') { actx.resume(); }
+        ensureNoiseBuffers(actx);
+
         const bpm = 140 + (speedLevel - 1) * 10;
-        const step = 60 / bpm / 4;
-        const now = actx.currentTime + 0.05;
+        const step = 60 / bpm / 2;
+        const now = actx.currentTime + 0.1;
 
-        const bassIdx = musicBarIndex % BASS_PATTERNS.length;
-        const leadIdx = musicBarIndex % LEAD_PATTERNS.length;
-        const bass = BASS_PATTERNS[bassIdx];
-        const lead = powerMode ? POWER_LEAD : LEAD_PATTERNS[leadIdx];
-        const arpChordIdx = musicBarIndex % ARP_CHORDS.length;
+        const bass = BASS_PATTERNS[musicBarIndex % BASS_PATTERNS.length];
+        const lead = powerMode ? POWER_LEAD : LEAD_PATTERNS[musicBarIndex % LEAD_PATTERNS.length];
 
-        for (let s = 0; s < 16; s++) {
+        for (let s = 0; s < 8; s++) {
           const t = now + s * step;
-          const noteDur = step * 0.85;
+          const dur = step * 0.8;
 
-          // Drums
           if (KICK_PAT[s])  chipKick(actx, t);
           if (SNARE_PAT[s]) chipSnare(actx, t);
-          if (HH_PAT[s])    chipHihat(actx, t, false);
-          if (HH_OPEN[s])   chipHihat(actx, t, true);
+          if (HH_PAT[s])    chipHihat(actx, t, s === 7);
 
-          // Bass (square wave, low octave)
-          chipNote(actx, nf(bass[s]), t, noteDur, 'square', 0.07);
+          chipNote(actx, nf(bass[s]), t, dur, 'square', 0.06);
 
-          // Lead melody (pulse via square + detune for chorus)
-          if (s % 2 === 0 || speedLevel >= 3) {
-            chipNote(actx, nf(lead[s]), t, noteDur * 0.9, 'square', 0.04, 8);
+          if (s % 2 === 0) {
+            chipNote(actx, nf(lead[s]), t, dur * 0.9, 'square', 0.035);
           }
 
-          // Arpeggio layer (triangle, fast cycling through chord tones)
-          if (speedLevel >= 2 && s % 2 === 0) {
-            const chord = ARP_CHORDS[(arpChordIdx + Math.floor(s / 4)) % ARP_CHORDS.length];
-            const arpNote = chord[s % chord.length];
-            chipNote(actx, nf(arpNote), t, noteDur * 0.5, 'triangle', 0.025);
+          if (speedLevel >= 3 && s % 2 === 1) {
+            chipNote(actx, nf(lead[s]), t, dur * 0.5, 'triangle', 0.02);
           }
 
-          // Power mode: extra aggressive sawtooth sub-bass
           if (powerMode && s % 4 === 0) {
-            chipNote(actx, nf(bass[s]) * 0.5, t, step * 3.5, 'sawtooth', 0.04);
+            chipNote(actx, nf(bass[s]) * 0.5, t, step * 3, 'sawtooth', 0.03);
           }
         }
 
         musicBarIndex++;
-        const barMs = step * 16 * 1000;
-        musicInterval = setTimeout(scheduleBar, barMs - 80);
+        const barMs = step * 8 * 1000;
+        musicInterval = setTimeout(scheduleBar, Math.max(100, barMs - 100));
       } catch (e) {}
     }
 
@@ -598,7 +595,7 @@
       if (musicPlaying || muted) return;
       musicPlaying = true;
       musicBarIndex = 0;
-      scheduleBar();
+      setTimeout(scheduleBar, 150);
     }
 
     function stopMusic() {
