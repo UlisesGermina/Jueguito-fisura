@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pac-Run - El juego de Theo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+
+    #game-wrapper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #hud {
+      display: flex;
+      justify-content: space-between;
+      width: 800px;
+      color: #fff;
+      font-size: 20px;
+      padding: 0 4px;
+    }
+
+    #hud span { text-transform: uppercase; letter-spacing: 2px; }
+    .hud-val { color: #ffff00; }
+
+    canvas {
+      border: 3px solid #2121de;
+      border-radius: 6px;
+      display: block;
+      background: #000;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      z-index: 10;
+      pointer-events: auto;
+      border-radius: 6px;
+    }
+
+    #overlay.hidden { display: none; }
+
+    #overlay h1 {
+      font-size: 48px;
+      color: #ffff00;
+      margin-bottom: 8px;
+      text-shadow: 2px 2px 6px rgba(255, 255, 0, 0.4);
+    }
+
+    #overlay h2 {
+      font-size: 28px;
+      color: #ff4444;
+      margin-bottom: 16px;
+    }
+
+    #overlay p {
+      font-size: 18px;
+      margin: 6px 0;
+      color: #ccc;
+    }
+
+    #overlay .key {
+      display: inline-block;
+      border: 2px solid #ffff00;
+      border-radius: 6px;
+      padding: 2px 10px;
+      color: #ffff00;
+      font-weight: bold;
+      margin: 0 2px;
+    }
+
+    #overlay button {
+      margin-top: 24px;
+      padding: 14px 40px;
+      font-size: 20px;
+      font-family: 'Courier New', monospace;
+      background: #ffff00;
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-weight: bold;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+
+    #overlay button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 20px rgba(255, 255, 0, 0.5);
+    }
+
+    #dpad {
+      display: none;
+      position: relative;
+      width: 160px;
+      height: 160px;
+      margin-top: 10px;
+      flex-shrink: 0;
+    }
+
+    #dpad .dpad-btn {
+      position: absolute;
+      width: 52px;
+      height: 52px;
+      background: rgba(255, 255, 0, 0.15);
+      border: 2px solid rgba(255, 255, 0, 0.5);
+      border-radius: 10px;
+      color: #ffff00;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      transition: background 0.05s;
+    }
+
+    #dpad .dpad-btn.active {
+      background: rgba(255, 255, 0, 0.4);
+      border-color: #ffff00;
+      box-shadow: 0 0 12px rgba(255, 255, 0, 0.4);
+    }
+
+    #dpad .dpad-up    { top: 0; left: 54px; }
+    #dpad .dpad-down  { bottom: 0; left: 54px; }
+    #dpad .dpad-left  { top: 54px; left: 0; }
+    #dpad .dpad-right { top: 54px; right: 0; }
+
+    @media (max-width: 850px) {
+      #hud {
+        width: 100vw;
+        font-size: 13px;
+        padding: 0 8px;
+        gap: 4px;
+      }
+      #hud span { letter-spacing: 0.5px; }
+      canvas {
+        width: 100vw;
+        height: auto;
+      }
+      #overlay h1 { font-size: 32px; }
+      #overlay h2 { font-size: 22px; }
+      #overlay p { font-size: 14px; padding: 0 12px; }
+      #overlay button { font-size: 16px; padding: 12px 30px; }
+      #overlay .key { padding: 1px 6px; font-size: 13px; }
+    }
+
+    @media (pointer: coarse) {
+      #dpad { display: block; }
+      .desktop-instructions { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-wrapper">
+    <div id="hud">
+      <span>Puntos: <span class="hud-val" id="score-display">0</span></span>
+      <span>Record: <span class="hud-val" id="hi-score-display">0</span></span>
+      <span>Velocidad: <span class="hud-val" id="speed-display">1</span></span>
+      <span>Vidas: <span class="hud-val" id="lives-display">♥♥♥</span></span>
+    </div>
+    <div id="canvas-container" style="position:relative">
+    <canvas id="game" width="800" height="500"></canvas>
+    <div id="overlay">
+      <h1>PAC-RUN</h1>
+      <p style="font-size:22px; color:#ffff00; margin-bottom:8px">Dale Theo, vos podés!</p>
+      <p class="desktop-instructions">Usá <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> o <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> para moverte</p>
+      <p class="mobile-instructions" style="display:none">Usá los botones de abajo para moverte</p>
+      <p>Comé nuggets para sumar puntos — ¡los baldes de KFC te dan poderes!</p>
+      <p>Esquivá los fantasmas, Theo. Vos sabés.</p>
+      <p style="color:#ff4444; margin-top:10px">¡No dejes que la pared izquierda te aplaste!</p>
+      <button id="start-btn">Jugar</button>
+    </div>
+    <div id="dpad">
+      <div class="dpad-btn dpad-up" data-dir="ArrowUp">▲</div>
+      <div class="dpad-btn dpad-down" data-dir="ArrowDown">▼</div>
+      <div class="dpad-btn dpad-left" data-dir="ArrowLeft">◀</div>
+      <div class="dpad-btn dpad-right" data-dir="ArrowRight">▶</div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('start-btn');
+    const scoreDisplay = document.getElementById('score-display');
+    const hiScoreDisplay = document.getElementById('hi-score-display');
+    const speedDisplay = document.getElementById('speed-display');
+    const livesDisplay = document.getElementById('lives-display');
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const LANE_COUNT = 5;
+    const LANE_H = H / LANE_COUNT;
+    const PAC_SIZE = 30;
+    const DOT_SIZE = 6;
+    const POWER_DOT_SIZE = 12;
+    const GHOST_SIZE = 30;
+    const WALL_W = 40;
+    const WALL_MIN_H = 60;
+    const WALL_MAX_H = 160;
+
+    let hiScore = parseInt(localStorage.getItem('pacrun-hiscore') || '0', 10);
+    hiScoreDisplay.textContent = hiScore;
+
+    let state, pacman, obstacles, dots, particles, score, lives, speed,
+        spawnTimer, dotTimer, frameCount, gameOver, mouthAngle, mouthDir,
+        powerMode, powerTimer, shakeTimer, flashTimer, difficultyTimer,
+        speedLevel, speedUpBanner, speedUpBannerTimer,
+        mazeWalls, mazeTimer, mazeWarning, mazeWarningTimer, mazeCount,
+        mazeBanner, mazeBannerTimer, mazeActive;
+
+    const keys = {};
+
+    function init() {
+      state = 'playing';
+      score = 0;
+      lives = 3;
+      speed = 3.5;
+      spawnTimer = 0;
+      dotTimer = 0;
+      frameCount = 0;
+      gameOver = false;
+      mouthAngle = 0.25;
+      mouthDir = 1;
+      powerMode = false;
+      powerTimer = 0;
+      shakeTimer = 0;
+      flashTimer = 0;
+      difficultyTimer = 0;
+      speedLevel = 1;
+      speedUpBanner = false;
+      speedUpBannerTimer = 0;
+      mazeWalls = [];
+      mazeTimer = 500;
+      mazeWarning = false;
+      mazeWarningTimer = 0;
+      mazeCount = 0;
+      mazeBanner = false;
+      mazeBannerTimer = 0;
+      mazeActive = false;
+
+      pacman = {
+        x: 200,
+        y: H / 2,
+        facing: 0,
+      };
+
+      obstacles = [];
+      dots = [];
+      particles = [];
+
+      updateHUD();
+      overlay.classList.add('hidden');
+    }
+
+    function spawnDot(x) {
+      const lane = Math.floor(Math.random() * LANE_COUNT);
+      const isPower = Math.random() < 0.08;
+      dots.push({
+        x: x || W + 20,
+        y: lane * LANE_H + LANE_H / 2,
+        size: isPower ? POWER_DOT_SIZE : DOT_SIZE,
+        power: isPower,
+        glow: 0,
+      });
+    }
+
+    function spawnGhost() {
+      const lane = Math.floor(Math.random() * LANE_COUNT);
+      const colors = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
+      obstacles.push({
+        type: 'ghost',
+        x: W + 30,
+        y: lane * LANE_H + LANE_H / 2,
+        w: GHOST_SIZE,
+        h: GHOST_SIZE,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        wobble: Math.random() * Math.PI * 2,
+      });
+    }
+
+    function spawnWall() {
+      const wallH = WALL_MIN_H + Math.random() * (WALL_MAX_H - WALL_MIN_H);
+      const y = Math.random() * (H - wallH);
+      obstacles.push({
+        type: 'wall',
+        x: W + 10,
+        y: y,
+        w: WALL_W,
+        h: wallH,
+        color: '#2121de',
+      });
+    }
+
+    function spawnObstacle() {
+      if (Math.random() < 0.6) {
+        spawnGhost();
+      } else {
+        spawnWall();
+      }
+    }
+
+    function addGapColumn(walls, x, gapCenterY, gapH, colW) {
+      const gapTop = gapCenterY - gapH / 2;
+      const gapBottom = gapCenterY + gapH / 2;
+      if (gapTop > 0) walls.push({ x, y: 0, w: colW, h: gapTop });
+      if (gapBottom < H) walls.push({ x, y: gapBottom, w: colW, h: H - gapBottom });
+    }
+
+    function spawnMaze() {
+      mazeCount++;
+      const gapH = Math.max(72, 100 - mazeCount * 3);
+      const colW = 22;
+      const baseX = W + 120;
+      const walls = [];
+      const patternCount = Math.min(5, 2 + Math.floor(mazeCount / 2));
+      const patternIdx = Math.floor(Math.random() * patternCount);
+
+      const upper = H * 0.25;
+      const lower = H * 0.75;
+      const mid = H * 0.5;
+
+      switch (patternIdx) {
+        case 0: { // ZIGZAG: 3 columns, gap alternates lower/upper/lower
+          const sp = 160;
+          addGapColumn(walls, baseX, lower, gapH, colW);
+          addGapColumn(walls, baseX + sp, upper, gapH, colW);
+          addGapColumn(walls, baseX + sp * 2, lower, gapH, colW);
+          break;
+        }
+        case 1: { // SNAKE: 4 columns, alternating gaps
+          const sp = 150;
+          addGapColumn(walls, baseX, lower, gapH, colW);
+          addGapColumn(walls, baseX + sp, upper, gapH, colW);
+          addGapColumn(walls, baseX + sp * 2, lower, gapH, colW);
+          addGapColumn(walls, baseX + sp * 3, upper, gapH, colW);
+          break;
+        }
+        case 2: { // FUNNEL: Wide entrance narrows to a shifted exit
+          const wideGap = gapH + 60;
+          addGapColumn(walls, baseX, mid, wideGap, colW);
+          const narrowAmt = (wideGap - gapH) / 2;
+          walls.push({ x: baseX + colW, y: mid - wideGap / 2, w: 200, h: narrowAmt });
+          walls.push({ x: baseX + colW, y: mid + gapH / 2, w: 200, h: narrowAmt });
+          addGapColumn(walls, baseX + colW + 200, mid - 40, gapH, colW);
+          break;
+        }
+        case 3: { // STAIRCASE: 3 columns, gap descends top→mid→bottom
+          const sp = 170;
+          addGapColumn(walls, baseX, H * 0.2, gapH, colW);
+          addGapColumn(walls, baseX + sp, mid, gapH, colW);
+          addGapColumn(walls, baseX + sp * 2, H * 0.8, gapH, colW);
+          break;
+        }
+        case 4: { // LONG GAUNTLET: 5 alternating columns
+          const sp = 140;
+          for (let i = 0; i < 5; i++) {
+            const gapY = i % 2 === 0 ? lower : upper;
+            addGapColumn(walls, baseX + sp * i, gapY, gapH, colW);
+          }
+          break;
+        }
+      }
+
+      for (const w of walls) {
+        mazeWalls.push({ x: w.x, y: w.y, w: w.w, h: w.h });
+      }
+      mazeActive = true;
+      mazeBanner = true;
+      mazeBannerTimer = 80;
+    }
+
+    function resolveMazeCollisions() {
+      const r = PAC_SIZE * 0.65;
+      for (const wall of mazeWalls) {
+        const closestX = Math.max(wall.x, Math.min(pacman.x, wall.x + wall.w));
+        const closestY = Math.max(wall.y, Math.min(pacman.y, wall.y + wall.h));
+        const dx = pacman.x - closestX;
+        const dy = pacman.y - closestY;
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < r * r) {
+          if (distSq === 0) {
+            const toLeft = pacman.x - wall.x;
+            const toRight = (wall.x + wall.w) - pacman.x;
+            const toTop = pacman.y - wall.y;
+            const toBottom = (wall.y + wall.h) - pacman.y;
+            const minD = Math.min(toLeft, toRight, toTop, toBottom);
+            if (minD === toLeft) pacman.x = wall.x - r;
+            else if (minD === toRight) pacman.x = wall.x + wall.w + r;
+            else if (minD === toTop) pacman.y = wall.y - r;
+            else pacman.y = wall.y + wall.h + r;
+          } else {
+            const dist = Math.sqrt(distSq);
+            const overlap = r - dist;
+            pacman.x += (dx / dist) * overlap;
+            pacman.y += (dy / dist) * overlap;
+          }
+        }
+      }
+    }
+
+    function emitParticles(x, y, color, count) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x, y,
+          vx: (Math.random() - 0.5) * 5,
+          vy: (Math.random() - 0.5) * 5,
+          life: 30 + Math.random() * 20,
+          maxLife: 50,
+          size: 2 + Math.random() * 4,
+          color,
+        });
+      }
+    }
+
+    function updateHUD() {
+      scoreDisplay.textContent = score;
+      hiScoreDisplay.textContent = hiScore;
+      speedDisplay.textContent = speedLevel;
+      const hearts = '♥'.repeat(Math.max(0, lives)) + '♡'.repeat(Math.max(0, 3 - lives));
+      livesDisplay.textContent = hearts;
+    }
+
+    function handleInput() {
+      const moveSpeed = 6 + (speedLevel - 1) * 0.5;
+      let mx = 0, my = 0;
+
+      if (keys['ArrowUp'] || keys['w'] || keys['W']) my -= 1;
+      if (keys['ArrowDown'] || keys['s'] || keys['S']) my += 1;
+      if (keys['ArrowLeft'] || keys['a'] || keys['A']) mx -= 1;
+      if (keys['ArrowRight'] || keys['d'] || keys['D']) mx += 1;
+
+      if (mx !== 0 || my !== 0) {
+        const len = Math.sqrt(mx * mx + my * my);
+        mx /= len;
+        my /= len;
+        pacman.facing = Math.atan2(my, mx);
+      }
+
+      pacman.x += mx * moveSpeed;
+      pacman.y += my * moveSpeed;
+
+      pacman.x -= speed * 0.5;
+
+      pacman.y = Math.max(PAC_SIZE, Math.min(H - PAC_SIZE, pacman.y));
+      pacman.x = Math.min(W - PAC_SIZE, pacman.x);
+    }
+
+    function circleRect(cx, cy, r, rx, ry, rw, rh) {
+      const nearX = Math.max(rx, Math.min(cx, rx + rw));
+      const nearY = Math.max(ry, Math.min(cy, ry + rh));
+      const dx = cx - nearX;
+      const dy = cy - nearY;
+      return dx * dx + dy * dy < r * r;
+    }
+
+    function circleDist(x1, y1, r1, x2, y2, r2) {
+      const dx = x1 - x2;
+      const dy = y1 - y2;
+      return Math.sqrt(dx * dx + dy * dy) < r1 + r2;
+    }
+
+    function update() {
+      if (state !== 'playing') return;
+
+      frameCount++;
+      difficultyTimer++;
+
+      speed = 3.5 + difficultyTimer * 0.002;
+
+      const newLevel = Math.floor((speed - 3.5) / 1.0) + 1;
+      if (newLevel > speedLevel) {
+        speedLevel = newLevel;
+        speedUpBanner = true;
+        speedUpBannerTimer = 90;
+      }
+
+      if (speedUpBannerTimer > 0) speedUpBannerTimer--;
+      if (speedUpBannerTimer <= 0) speedUpBanner = false;
+
+      // mouth animation
+      mouthAngle += 0.04 * mouthDir;
+      if (mouthAngle > 0.35) mouthDir = -1;
+      if (mouthAngle < 0.05) mouthDir = 1;
+
+      handleInput();
+      if (state !== 'playing') return;
+
+      // maze timer and spawning
+      if (mazeWarning) {
+        mazeWarningTimer--;
+        if (mazeWarningTimer <= 0) {
+          mazeWarning = false;
+          spawnMaze();
+        }
+      } else if (!mazeActive) {
+        mazeTimer--;
+        if (mazeTimer <= 0) {
+          mazeWarning = true;
+          mazeWarningTimer = 120;
+          const interval = Math.max(300, 700 - mazeCount * 40);
+          mazeTimer = interval;
+        }
+      }
+
+      // move maze walls
+      for (let i = mazeWalls.length - 1; i >= 0; i--) {
+        mazeWalls[i].x -= speed;
+        if (mazeWalls[i].x + mazeWalls[i].w < -20) {
+          mazeWalls.splice(i, 1);
+        }
+      }
+      if (mazeActive && mazeWalls.length === 0) {
+        mazeActive = false;
+        score += 300 + mazeCount * 50;
+        emitParticles(pacman.x, pacman.y, '#55ff55', 20);
+      }
+
+      resolveMazeCollisions();
+      pacman.y = Math.max(PAC_SIZE, Math.min(H - PAC_SIZE, pacman.y));
+      if (pacman.x - PAC_SIZE <= 0) {
+        emitParticles(pacman.x, pacman.y, '#ffff00', 25);
+        shakeTimer = 20;
+        lives = 0;
+        endGame();
+        return;
+      }
+
+      if (mazeBannerTimer > 0) mazeBannerTimer--;
+      if (mazeBannerTimer <= 0) mazeBanner = false;
+
+      // spawn obstacles (reduced during maze)
+      const spawnRate = Math.max(40, 100 - Math.floor(difficultyTimer / 800) * 5);
+      spawnTimer++;
+      const effectiveRate = mazeActive ? spawnRate * 3 : spawnRate;
+      if (spawnTimer >= effectiveRate) {
+        spawnTimer = 0;
+        spawnObstacle();
+      }
+
+      // spawn dots
+      dotTimer++;
+      if (dotTimer >= 20) {
+        dotTimer = 0;
+        spawnDot();
+      }
+
+      // move obstacles
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const o = obstacles[i];
+        o.x -= speed;
+        if (o.type === 'ghost') {
+          o.wobble += 0.08;
+          o.y += Math.sin(o.wobble) * 0.8;
+        }
+        if (o.x + o.w < -20) {
+          obstacles.splice(i, 1);
+          continue;
+        }
+
+        // collision
+        let hit = false;
+        if (o.type === 'ghost') {
+          hit = circleDist(pacman.x, pacman.y, PAC_SIZE * 0.7, o.x, o.y, o.w * 0.5);
+        } else {
+          hit = circleRect(pacman.x, pacman.y, PAC_SIZE * 0.7, o.x, o.y, o.w, o.h);
+        }
+
+        if (hit) {
+          if (powerMode && o.type === 'ghost') {
+            emitParticles(o.x, o.y, '#00ffff', 15);
+            score += 200;
+            obstacles.splice(i, 1);
+          } else {
+            lives--;
+            shakeTimer = 15;
+            flashTimer = 30;
+            emitParticles(pacman.x, pacman.y, '#ffff00', 20);
+            obstacles.splice(i, 1);
+            if (lives <= 0) {
+              endGame();
+              return;
+            }
+            pacman.x = 200;
+            pacman.y = H / 2;
+            pacman.facing = 0;
+            updateHUD();
+          }
+        }
+      }
+
+      // move dots
+      for (let i = dots.length - 1; i >= 0; i--) {
+        const d = dots[i];
+        d.x -= speed;
+        d.glow += 0.1;
+        if (d.x < -20) {
+          dots.splice(i, 1);
+          continue;
+        }
+
+        if (circleDist(pacman.x, pacman.y, PAC_SIZE * 0.7, d.x, d.y, d.size)) {
+          if (d.power) {
+            powerMode = true;
+            powerTimer = 300;
+            emitParticles(d.x, d.y, '#cc0000', 12);
+            score += 50;
+          } else {
+            score += 10;
+            emitParticles(d.x, d.y, '#d4a24e', 5);
+          }
+          dots.splice(i, 1);
+        }
+      }
+
+      // power mode timer
+      if (powerMode) {
+        powerTimer--;
+        if (powerTimer <= 0) powerMode = false;
+      }
+
+      // particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      if (shakeTimer > 0) shakeTimer--;
+      if (flashTimer > 0) flashTimer--;
+
+      // passive score
+      if (frameCount % 10 === 0) score++;
+
+      updateHUD();
+    }
+
+    function drawMaze() {
+      ctx.strokeStyle = '#1a1a6e';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < LANE_COUNT; i++) {
+        const y = i * LANE_H;
+        ctx.beginPath();
+        ctx.setLineDash([8, 12]);
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      const danger = Math.max(0, 1 - pacman.x / 150);
+      const pulse = 0.5 + Math.sin(frameCount * 0.2) * 0.5;
+      const glowAlpha = danger * (0.4 + pulse * 0.4);
+
+      ctx.save();
+      ctx.fillStyle = '#ff0000';
+      ctx.shadowColor = '#ff0000';
+      ctx.shadowBlur = 15 + danger * 20;
+      ctx.fillRect(0, 0, 3, H);
+      ctx.restore();
+
+      if (danger > 0) {
+        const grad = ctx.createLinearGradient(0, 0, 100, 0);
+        grad.addColorStop(0, `rgba(255, 0, 0, ${glowAlpha})`);
+        grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 100, H);
+      }
+    }
+
+    function drawPacman() {
+      const blinkOffset = flashTimer > 0 && Math.floor(flashTimer / 3) % 2 === 0;
+      if (blinkOffset) return;
+
+      ctx.save();
+      ctx.translate(pacman.x, pacman.y);
+      ctx.rotate(pacman.facing);
+
+      if (powerMode) {
+        ctx.shadowColor = '#ffaaff';
+        ctx.shadowBlur = 20;
+      }
+
+      ctx.fillStyle = '#ffff00';
+      ctx.beginPath();
+      ctx.arc(0, 0, PAC_SIZE, Math.PI * mouthAngle, Math.PI * (2 - mouthAngle));
+      ctx.lineTo(0, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(4, -10, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawGhost(g) {
+      const { x, y, w, color } = g;
+      const r = w / 2;
+
+      ctx.save();
+      ctx.translate(x, y);
+
+      if (powerMode) {
+        ctx.fillStyle = '#2121de';
+        ctx.shadowColor = '#2121de';
+      } else {
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+      }
+      ctx.shadowBlur = 10;
+
+      // body
+      ctx.beginPath();
+      ctx.arc(0, -r * 0.2, r, Math.PI, 0);
+      ctx.lineTo(r, r * 0.8);
+
+      // wavy bottom
+      const segs = 3;
+      const segW = (r * 2) / segs;
+      for (let i = 0; i < segs; i++) {
+        const sx = r - i * segW;
+        const wobble = Math.sin(frameCount * 0.15 + i) * 3;
+        ctx.lineTo(sx - segW / 2, r * 0.5 + wobble);
+        ctx.lineTo(sx - segW, r * 0.8);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // eyes
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(-r * 0.3, -r * 0.3, r * 0.28, 0, Math.PI * 2);
+      ctx.arc(r * 0.3, -r * 0.3, r * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (powerMode) {
+        ctx.fillStyle = '#ff0000';
+      } else {
+        ctx.fillStyle = '#2121de';
+      }
+      ctx.beginPath();
+      ctx.arc(-r * 0.3, -r * 0.25, r * 0.14, 0, Math.PI * 2);
+      ctx.arc(r * 0.3, -r * 0.25, r * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawWall(wall) {
+      ctx.fillStyle = wall.color;
+      ctx.shadowColor = '#4242ff';
+      ctx.shadowBlur = 8;
+      ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+
+      ctx.strokeStyle = '#4242ff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(wall.x + 3, wall.y + 3, wall.w - 6, wall.h - 6);
+      ctx.shadowBlur = 0;
+    }
+
+    function drawMazeWalls() {
+      mazeWalls.forEach(wall => {
+        ctx.save();
+        ctx.fillStyle = '#1818aa';
+        ctx.shadowColor = '#5555ff';
+        ctx.shadowBlur = 12;
+        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+        ctx.strokeStyle = '#4444dd';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(wall.x + 1, wall.y + 1, wall.w - 2, wall.h - 2);
+        ctx.strokeStyle = '#6666ff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(wall.x + 4, wall.y + 4, wall.w - 8, wall.h - 8);
+        ctx.restore();
+      });
+    }
+
+    function drawPixel(x, y, size, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, size, size);
+    }
+
+    function drawNugget(cx, cy, scale) {
+      const s = scale;
+      const ox = cx - s * 5;
+      const oy = cy - s * 4;
+      const c1 = '#d4a24e';
+      const c2 = '#c4882a';
+      const c3 = '#e8c36a';
+      const c4 = '#a06820';
+      // row 0
+      drawPixel(ox+s*2,oy,s,c2); drawPixel(ox+s*3,oy,s,c2); drawPixel(ox+s*4,oy,s,c2);
+      drawPixel(ox+s*5,oy,s,c2); drawPixel(ox+s*6,oy,s,c2);
+      // row 1
+      drawPixel(ox+s*1,oy+s,s,c2); drawPixel(ox+s*2,oy+s,s,c3); drawPixel(ox+s*3,oy+s,s,c3);
+      drawPixel(ox+s*4,oy+s,s,c1); drawPixel(ox+s*5,oy+s,s,c1); drawPixel(ox+s*6,oy+s,s,c1);
+      drawPixel(ox+s*7,oy+s,s,c2);
+      // row 2
+      drawPixel(ox,oy+s*2,s,c2); drawPixel(ox+s,oy+s*2,s,c3); drawPixel(ox+s*2,oy+s*2,s,c1);
+      drawPixel(ox+s*3,oy+s*2,s,c3); drawPixel(ox+s*4,oy+s*2,s,c1); drawPixel(ox+s*5,oy+s*2,s,c1);
+      drawPixel(ox+s*6,oy+s*2,s,c3); drawPixel(ox+s*7,oy+s*2,s,c1); drawPixel(ox+s*8,oy+s*2,s,c2);
+      // row 3
+      drawPixel(ox,oy+s*3,s,c2); drawPixel(ox+s,oy+s*3,s,c1); drawPixel(ox+s*2,oy+s*3,s,c1);
+      drawPixel(ox+s*3,oy+s*3,s,c1); drawPixel(ox+s*4,oy+s*3,s,c3); drawPixel(ox+s*5,oy+s*3,s,c1);
+      drawPixel(ox+s*6,oy+s*3,s,c1); drawPixel(ox+s*7,oy+s*3,s,c1); drawPixel(ox+s*8,oy+s*3,s,c2);
+      // row 4
+      drawPixel(ox,oy+s*4,s,c4); drawPixel(ox+s,oy+s*4,s,c2); drawPixel(ox+s*2,oy+s*4,s,c1);
+      drawPixel(ox+s*3,oy+s*4,s,c1); drawPixel(ox+s*4,oy+s*4,s,c1); drawPixel(ox+s*5,oy+s*4,s,c3);
+      drawPixel(ox+s*6,oy+s*4,s,c1); drawPixel(ox+s*7,oy+s*4,s,c2); drawPixel(ox+s*8,oy+s*4,s,c4);
+      // row 5
+      drawPixel(ox+s,oy+s*5,s,c4); drawPixel(ox+s*2,oy+s*5,s,c2); drawPixel(ox+s*3,oy+s*5,s,c2);
+      drawPixel(ox+s*4,oy+s*5,s,c1); drawPixel(ox+s*5,oy+s*5,s,c2); drawPixel(ox+s*6,oy+s*5,s,c2);
+      drawPixel(ox+s*7,oy+s*5,s,c4);
+      // row 6
+      drawPixel(ox+s*2,oy+s*6,s,c4); drawPixel(ox+s*3,oy+s*6,s,c4); drawPixel(ox+s*4,oy+s*6,s,c4);
+      drawPixel(ox+s*5,oy+s*6,s,c4); drawPixel(ox+s*6,oy+s*6,s,c4);
+    }
+
+    function drawBucket(cx, cy, scale) {
+      const s = scale;
+      const ox = cx - s * 7;
+      const oy = cy - s * 8;
+      const red = '#cc0000';
+      const dred = '#990000';
+      const wht = '#ffffff';
+      const gry = '#dddddd';
+      const tan = '#d4a24e';
+      const brn = '#c4882a';
+      const drk = '#a06820';
+      // lid - row 0-1
+      drawPixel(ox+s*3,oy,s,gry); drawPixel(ox+s*4,oy,s,gry); drawPixel(ox+s*5,oy,s,gry);
+      drawPixel(ox+s*6,oy,s,gry); drawPixel(ox+s*7,oy,s,gry); drawPixel(ox+s*8,oy,s,gry);
+      drawPixel(ox+s*9,oy,s,gry); drawPixel(ox+s*10,oy,s,gry);
+      drawPixel(ox+s*2,oy+s,s,gry);
+      for (let i = 3; i <= 10; i++) drawPixel(ox+s*i,oy+s,s,wht);
+      drawPixel(ox+s*11,oy+s,s,gry);
+      // nuggets sticking out - row 2-3
+      drawPixel(ox+s*3,oy+s*2,s,brn); drawPixel(ox+s*4,oy+s*2,s,tan); drawPixel(ox+s*5,oy+s*2,s,brn);
+      drawPixel(ox+s*6,oy+s*2,s,tan); drawPixel(ox+s*7,oy+s*2,s,tan); drawPixel(ox+s*8,oy+s*2,s,brn);
+      drawPixel(ox+s*9,oy+s*2,s,tan); drawPixel(ox+s*10,oy+s*2,s,brn);
+      drawPixel(ox+s*2,oy+s*3,s,drk); drawPixel(ox+s*3,oy+s*3,s,tan); drawPixel(ox+s*4,oy+s*3,s,brn);
+      drawPixel(ox+s*5,oy+s*3,s,tan); drawPixel(ox+s*6,oy+s*3,s,brn); drawPixel(ox+s*7,oy+s*3,s,tan);
+      drawPixel(ox+s*8,oy+s*3,s,tan); drawPixel(ox+s*9,oy+s*3,s,brn); drawPixel(ox+s*10,oy+s*3,s,tan);
+      drawPixel(ox+s*11,oy+s*3,s,drk);
+      // bucket body - rows 4-12
+      for (let row = 4; row <= 12; row++) {
+        const inset = Math.floor((row - 4) * 0.3);
+        const left = 2 + inset;
+        const right = 12 - inset;
+        drawPixel(ox + s * left, oy + s * row, s, dred);
+        drawPixel(ox + s * right, oy + s * row, s, dred);
+        for (let col = left + 1; col < right; col++) {
+          drawPixel(ox + s * col, oy + s * row, s, red);
+        }
+      }
+      // KFC text on bucket (white pixels) - row 7-9 centered
+      const textY = oy + s * 7;
+      const textX = ox + s * 5;
+      // K
+      drawPixel(textX, textY, s, wht); drawPixel(textX, textY+s, s, wht); drawPixel(textX, textY+s*2, s, wht);
+      drawPixel(textX+s, textY+s, s, wht); drawPixel(textX+s*2, textY, s, wht); drawPixel(textX+s*2, textY+s*2, s, wht);
+      // F
+      drawPixel(textX+s*4, textY, s, wht); drawPixel(textX+s*5, textY, s, wht);
+      drawPixel(textX+s*4, textY+s, s, wht); drawPixel(textX+s*5, textY+s, s, wht);
+      drawPixel(textX+s*4, textY+s*2, s, wht);
+      // bottom row
+      const botRow = 13;
+      const bLeft = 2 + Math.floor((botRow - 4) * 0.3);
+      const bRight = 12 - Math.floor((botRow - 4) * 0.3);
+      for (let col = bLeft; col <= bRight; col++) {
+        drawPixel(ox + s * col, oy + s * botRow, s, dred);
+      }
+    }
+
+    function drawDots() {
+      dots.forEach(d => {
+        ctx.save();
+        if (d.power) {
+          const pulse = 1 + Math.sin(d.glow) * 0.15;
+          ctx.shadowColor = '#ff4400';
+          ctx.shadowBlur = 10;
+          drawBucket(d.x, d.y, 1.8 * pulse);
+        } else {
+          drawNugget(d.x, d.y, 1.2);
+        }
+        ctx.restore();
+      });
+    }
+
+    function drawParticles() {
+      particles.forEach(p => {
+        const alpha = p.life / p.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    function draw() {
+      ctx.save();
+
+      if (shakeTimer > 0) {
+        const shakeX = (Math.random() - 0.5) * 8;
+        const shakeY = (Math.random() - 0.5) * 8;
+        ctx.translate(shakeX, shakeY);
+      }
+
+      ctx.clearRect(-10, -10, W + 20, H + 20);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+
+      drawMaze();
+      drawDots();
+      drawMazeWalls();
+
+      obstacles.forEach(o => {
+        if (o.type === 'ghost') drawGhost(o);
+        else drawWall(o);
+      });
+
+      drawPacman();
+      drawParticles();
+
+      // power mode indicator
+      if (powerMode) {
+        ctx.fillStyle = `rgba(33, 33, 222, ${0.1 + Math.sin(frameCount * 0.1) * 0.05})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // speed up banner
+      if (speedUpBanner) {
+        const alpha = speedUpBannerTimer / 90;
+        const scale = 1 + (1 - alpha) * 0.5;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(W / 2, H / 2);
+        ctx.scale(scale, scale);
+        ctx.font = 'bold 52px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ff4444';
+        ctx.shadowColor = '#ff4444';
+        ctx.shadowBlur = 20;
+        ctx.fillText('¡MÁS RÁPIDO!', 0, -10);
+        ctx.font = 'bold 28px "Courier New", monospace';
+        ctx.fillStyle = '#ffff00';
+        ctx.shadowColor = '#ffff00';
+        ctx.fillText('Nivel ' + speedLevel, 0, 30);
+        ctx.restore();
+      }
+
+      // maze warning
+      if (mazeWarning) {
+        const pulse = 0.6 + Math.sin(frameCount * 0.15) * 0.4;
+        ctx.save();
+        ctx.globalAlpha = pulse;
+        ctx.font = 'bold 44px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ff6600';
+        ctx.shadowColor = '#ff6600';
+        ctx.shadowBlur = 25;
+        ctx.fillText('⚠ VIENE UN LABERINTO ⚠', W / 2, H / 2);
+        ctx.restore();
+      }
+
+      // maze clear banner
+      if (mazeBanner) {
+        const alpha = mazeBannerTimer / 80;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = 'bold 40px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#55ff55';
+        ctx.shadowColor = '#55ff55';
+        ctx.shadowBlur = 20;
+        ctx.fillText('¡LABERINTO SUPERADO! +' + (300 + mazeCount * 50), W / 2, H / 2);
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    const deathMessages = [
+      'Te quiero hermano. Siempre.',
+      'Caerse no es perder, Theo. Perder es no volver a intentarlo.',
+      'La vida es tu sandbox, hacé lo que quieras con ella.',
+      'Podés ser lo que se te cante, Theo. Lo que sea.',
+      'El mundo es enorme y hermoso, y es todo tuyo.',
+      'No existe nada que no puedas lograr. Te lo prometo.',
+      'La vida es hermosa, Theo. Disfrutala.',
+      'Tu hermano te quiere más de lo que te imaginás.',
+      'Cada vez que te caés, te levantás más fuerte. Así funciona.',
+      'Sos capaz de todo. De TODO. No te olvides nunca.',
+    ];
+
+    const hiScoreMessages = [
+      '¡NUEVO RÉCORD! Te quiero, Theo. Estoy orgulloso de vos.',
+      '¡RÉCORD SUPERADO! Ves? No hay techo para vos.',
+      '¡NUEVO RÉCORD! Sabía que podías. Siempre lo supe.',
+      '¡RÉCORD! La vida es igual, Theo. Siempre podés ir más lejos.',
+      '¡NUEVO RÉCORD! Sos imparable. Tu hermano te ama.',
+    ];
+
+    function endGame() {
+      state = 'gameover';
+      gameOver = true;
+
+      const isNewHiScore = score > hiScore;
+      if (isNewHiScore) {
+        hiScore = score;
+        localStorage.setItem('pacrun-hiscore', hiScore.toString());
+      }
+      updateHUD();
+
+      const msg = isNewHiScore
+        ? hiScoreMessages[Math.floor(Math.random() * hiScoreMessages.length)]
+        : deathMessages[Math.floor(Math.random() * deathMessages.length)];
+
+      overlay.classList.remove('hidden');
+      overlay.innerHTML = `
+        <h2>${isNewHiScore ? '🏆 ¡LA ROMPISTE THEO!' : 'TE MORISTE THEO'}</h2>
+        <p>Puntos: <strong style="color:#ffff00">${score}</strong></p>
+        <p>Tu récord: <strong style="color:#ffff00">${hiScore}</strong></p>
+        <p>Nivel de velocidad: <strong style="color:#ff4444">${speedLevel}</strong></p>
+        <p style="color:#66ddff; margin-top:16px; font-style:italic; max-width:500px; line-height:1.5">${msg}</p>
+        <button id="restart-btn">Dale de nuevo</button>
+      `;
+      document.getElementById('restart-btn').addEventListener('click', () => {
+        init();
+        loop();
+      });
+    }
+
+    function loop() {
+      if (state !== 'playing') return;
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    // Input
+    window.addEventListener('keydown', e => {
+      keys[e.key] = true;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+    });
+    window.addEventListener('keyup', e => {
+      keys[e.key] = false;
+    });
+
+    // D-pad touch controls
+    const isMobile = window.matchMedia('(pointer: coarse)').matches;
+    if (isMobile) {
+      document.querySelectorAll('.mobile-instructions').forEach(el => el.style.display = '');
+    }
+
+    document.querySelectorAll('.dpad-btn').forEach(btn => {
+      const dir = btn.dataset.dir;
+
+      btn.addEventListener('touchstart', e => {
+        e.preventDefault();
+        keys[dir] = true;
+        btn.classList.add('active');
+      });
+      btn.addEventListener('touchend', e => {
+        e.preventDefault();
+        keys[dir] = false;
+        btn.classList.remove('active');
+      });
+      btn.addEventListener('touchcancel', e => {
+        keys[dir] = false;
+        btn.classList.remove('active');
+      });
+    });
+
+    canvas.addEventListener('touchstart', e => e.preventDefault());
+    canvas.addEventListener('touchmove', e => e.preventDefault());
+
+    startBtn.addEventListener('click', () => {
+      init();
+      loop();
+    });
+  </script>
+</body>
+</html>
