@@ -1,0 +1,11 @@
+{
+  "name": "Pac-Run - El juego de Theo",
+  "short_name": "Pac-Run",
+  "description": "Dale Theo, vos podés!",
+  "start_url": "index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#ffff00",
+  "icons": []
+}
