@@ -416,6 +416,7 @@
     let bucketCanvas, bucketCx, bucketCy, bucketLogW, bucketLogH;
 
     let musicPlaying = false;
+    let musicInterval = null;
 
     function getAudioContext() {
       if (!sharedAudioCtx) {
@@ -438,8 +439,177 @@
       } catch (e) {}
     }
 
-    function startMusic() {}
-    function stopMusic() {}
+    // --- Beethoven 16-bit Playlist (public domain compositions) ---
+    const NF = {};
+    (function() {
+      const n = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      for (let o = 0; o <= 8; o++)
+        for (let i = 0; i < 12; i++)
+          NF[n[i] + o] = 440 * Math.pow(2, (o * 12 + i - 69) / 12);
+    })();
+
+    let hhBuf = null;
+    function ensureHH(actx) {
+      if (hhBuf) return;
+      const len = Math.floor(actx.sampleRate * 0.04);
+      hhBuf = actx.createBuffer(1, len, actx.sampleRate);
+      const d = hhBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    }
+
+    const PLAYLIST = [
+      { name: 'Für Elise', bpm: 150,
+        melody: [
+          'E6','D#6','E6','D#6','E6','B5','D6','C6',
+          'A5',null,'C5','E5','A5','B5',null,'E5',
+          'G#5','B5','C6',null,'E5','E6','D#6','E6',
+          'D#6','E6','B5','D6','C6','A5',null,'C5',
+          'E5','A5','B5',null,'E5','C6','B5','A5',
+        ],
+        bass: [
+          'A3','A3','A3','A3','A3','A3','A3','A3',
+          'A3','A3','C4','C4','F3','F3','E3','E3',
+          'E3','E3','A3','A3','A3','A3','A3','A3',
+          'A3','A3','A3','A3','A3','A3','C4','C4',
+          'F3','F3','E3','E3','E3','E3','A3','A3',
+        ],
+      },
+      { name: 'Ode to Joy', bpm: 130,
+        melody: [
+          'E5','E5','F5','G5','G5','F5','E5','D5',
+          'C5','C5','D5','E5','E5',null,'D5','D5',
+          'E5','E5','F5','G5','G5','F5','E5','D5',
+          'C5','C5','D5','E5','D5',null,'C5','C5',
+          'D5','D5','E5','C5','D5','E5','F5','E5',
+          'C5','D5','E5','F5','E5','D5','C5','D5',
+        ],
+        bass: [
+          'C3','C3','C3','C3','G3','G3','C3','G3',
+          'C3','C3','G3','G3','C3','C3','G3','G3',
+          'C3','C3','C3','C3','G3','G3','C3','G3',
+          'C3','C3','G3','G3','G3','G3','C3','C3',
+          'G3','G3','C3','C3','G3','G3','C3','G3',
+          'C3','C3','G3','G3','C3','G3','C3','G3',
+        ],
+      },
+      { name: 'Symphony No.5', bpm: 115,
+        melody: [
+          'G5','G5','G5','D#5','D#5','D#5','D#5',null,
+          'F5','F5','F5','D5','D5','D5','D5',null,
+          'G5','G5','G5','D#5','D#5','D#5','D#5',null,
+          'G5','A#5','A#5','A#5','A5','A5','G5',null,
+          'G5','G5','G5','D#5','D#5','D#5','D#5',null,
+          'F5','F5','F5','D5','D5','D5','D5',null,
+        ],
+        bass: [
+          'C3','C3','C3','C3','C3','C3','C3','C3',
+          'G3','G3','G3','G3','G3','G3','G3','G3',
+          'C3','C3','C3','C3','C3','C3','C3','C3',
+          'D#3','D#3','D#3','D#3','F3','F3','G3','G3',
+          'C3','C3','C3','C3','C3','C3','C3','C3',
+          'G3','G3','G3','G3','G3','G3','G3','G3',
+        ],
+      },
+      { name: 'Moonlight Sonata', bpm: 108,
+        melody: [
+          'G#5','C#6','E6','G#5','C#6','E6','G#5','C#6',
+          'E6','G#5','C#6','E6','A5','C#6','E6','A5',
+          'C#6','E6','A5','D6','F#5','A5','D6','F#5',
+          'G#5','B5','E6','G#5','B5','E6','G#5','B5',
+          'G#5','C#6','E6','G#5','C#6','E6','G#5','C#6',
+          'A5','C#6','E6','A5','B5','E6','G#5','E6',
+        ],
+        bass: [
+          'C#3','C#3','C#3','C#3','C#3','C#3','C#3','C#3',
+          'C#3','C#3','C#3','C#3','A3','A3','A3','A3',
+          'A3','A3','D3','D3','D3','D3','D3','D3',
+          'E3','E3','E3','E3','E3','E3','E3','E3',
+          'C#3','C#3','C#3','C#3','C#3','C#3','C#3','C#3',
+          'A3','A3','A3','A3','E3','E3','E3','E3',
+        ],
+      },
+    ];
+
+    let currentSong = 0, songStep = 0;
+
+    function chipPlay(actx, freq, t, dur, type, vol) {
+      try {
+        if (!freq) return;
+        const osc = actx.createOscillator();
+        const g = actx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(g); g.connect(actx.destination);
+        osc.start(t); osc.stop(t + dur + 0.02);
+      } catch (e) {}
+    }
+
+    function playStep() {
+      if (!musicPlaying || muted) return;
+      try {
+        const actx = getAudioContext();
+        if (actx.state === 'suspended') actx.resume();
+        ensureHH(actx);
+
+        const song = PLAYLIST[currentSong];
+        const bpm = song.bpm + (speedLevel - 1) * 6;
+        const stepDur = 60 / bpm / 2;
+        const now = actx.currentTime + 0.05;
+
+        const mel = song.melody[songStep % song.melody.length];
+        const bas = song.bass[songStep % song.bass.length];
+
+        if (mel) chipPlay(actx, NF[mel], now, stepDur * 0.8, 'square', 0.045);
+        if (bas) chipPlay(actx, NF[bas], now, stepDur * 0.9, 'square', 0.035);
+
+        const beat = songStep % 8;
+        if (beat === 0 || beat === 4) {
+          try {
+            const osc = actx.createOscillator();
+            const g = actx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(30, now + 0.1);
+            g.gain.setValueAtTime(0.14, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+            osc.connect(g); g.connect(actx.destination);
+            osc.start(now); osc.stop(now + 0.13);
+          } catch (e) {}
+        } else if (beat % 2 === 0) {
+          try {
+            const src = actx.createBufferSource(); src.buffer = hhBuf;
+            const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 8000;
+            const g = actx.createGain();
+            g.gain.setValueAtTime(0.02, now);
+            g.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+            src.connect(hp); hp.connect(g); g.connect(actx.destination);
+            src.start(now); src.stop(now + 0.04);
+          } catch (e) {}
+        }
+
+        songStep++;
+        if (songStep >= song.melody.length) {
+          songStep = 0;
+          currentSong = (currentSong + 1) % PLAYLIST.length;
+        }
+
+        musicInterval = setTimeout(playStep, Math.max(50, stepDur * 1000 - 15));
+      } catch (e) {}
+    }
+
+    function startMusic() {
+      if (musicPlaying || muted) return;
+      musicPlaying = true;
+      songStep = 0;
+      setTimeout(playStep, 200);
+    }
+
+    function stopMusic() {
+      musicPlaying = false;
+      if (musicInterval) { clearTimeout(musicInterval); musicInterval = null; }
+    }
 
     function toggleMute() {
       muted = !muted;
