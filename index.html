@@ -248,6 +248,7 @@
         <span>Record: <span class="hud-val" id="hi-score-display">0</span></span>
         <span>Velocidad: <span class="hud-val" id="speed-display">1</span></span>
         <span>Vidas: <span class="hud-val" id="lives-display">♥♥♥</span></span>
+        <span id="pause-btn" style="cursor:pointer; display:none" onclick="togglePause()">⏸</span>
       </div>
       <div id="canvas-container">
         <canvas id="game" width="800" height="500"></canvas>
@@ -259,6 +260,8 @@
           <p>Comé nuggets para sumar puntos — ¡los baldes de KFC te dan poderes!</p>
           <p>Esquivá los fantasmas, Theo. Vos sabés.</p>
           <p style="color:#ff4444; margin-top:10px">¡No dejes que la pared izquierda te aplaste!</p>
+          <p class="desktop-instructions" style="color:#888; margin-top:6px"><span class="key">P</span> o <span class="key">Esc</span> para pausar</p>
+          <p class="mobile-instructions" style="display:none; color:#888; margin-top:6px">Tocá el canvas para pausar</p>
           <button id="start-btn">Jugar</button>
         </div>
       </div>
@@ -299,7 +302,7 @@
         powerMode, powerTimer, shakeTimer, flashTimer, difficultyTimer,
         speedLevel, speedUpBanner, speedUpBannerTimer,
         mazeWalls, mazeTimer, mazeWarning, mazeWarningTimer, mazeCount,
-        mazeBanner, mazeBannerTimer, mazeActive;
+        mazeBanner, mazeBannerTimer, mazeActive, graceTimer, paused;
 
     const keys = {};
 
@@ -330,10 +333,14 @@
       mazeBanner = false;
       mazeBannerTimer = 0;
       mazeActive = false;
+      graceTimer = 90;
+      paused = false;
 
       pacman = {
         x: 200,
         y: H / 2,
+        vx: 0,
+        vy: 0,
         facing: 0,
       };
 
@@ -357,13 +364,29 @@
       });
     }
 
+    function isTooCloseToExisting(newY, minDist) {
+      for (const o of obstacles) {
+        if (o.x > W - 80) {
+          const oy = o.type === 'ghost' ? o.y : o.y + o.h / 2;
+          if (Math.abs(oy - newY) < minDist) return true;
+        }
+      }
+      return false;
+    }
+
     function spawnGhost() {
-      const lane = Math.floor(Math.random() * LANE_COUNT);
+      let lane, y, attempts = 0;
+      do {
+        lane = Math.floor(Math.random() * LANE_COUNT);
+        y = lane * LANE_H + LANE_H / 2;
+        attempts++;
+      } while (isTooCloseToExisting(y, 60) && attempts < 8);
+
       const colors = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
       obstacles.push({
         type: 'ghost',
         x: W + 30,
-        y: lane * LANE_H + LANE_H / 2,
+        y: y,
         w: GHOST_SIZE,
         h: GHOST_SIZE,
         color: colors[Math.floor(Math.random() * colors.length)],
@@ -372,20 +395,20 @@
     }
 
     function spawnWall() {
-      const wallH = WALL_MIN_H + Math.random() * (WALL_MAX_H - WALL_MIN_H);
+      const wallH = WALL_MIN_H + Math.random() * (WALL_MAX_H - WALL_MIN_H) * 0.7;
       const y = Math.random() * (H - wallH);
       obstacles.push({
         type: 'wall',
         x: W + 10,
         y: y,
-        w: WALL_W,
+        w: 28,
         h: wallH,
         color: '#2121de',
       });
     }
 
     function spawnObstacle() {
-      if (Math.random() < 0.6) {
+      if (mazeCount >= 1 || Math.random() < 0.7) {
         spawnGhost();
       } else {
         spawnWall();
@@ -516,6 +539,8 @@
 
     function handleInput() {
       const moveSpeed = 6 + (speedLevel - 1) * 0.5;
+      const accel = 0.45;
+      const friction = 0.82;
       let mx = 0, my = 0;
 
       if (keys['ArrowUp'] || keys['w'] || keys['W']) my -= 1;
@@ -530,10 +555,20 @@
         pacman.facing = Math.atan2(my, mx);
       }
 
-      pacman.x += mx * moveSpeed;
-      pacman.y += my * moveSpeed;
+      pacman.vx += mx * moveSpeed * accel;
+      pacman.vy += my * moveSpeed * accel;
+      pacman.vx *= friction;
+      pacman.vy *= friction;
 
-      pacman.x -= speed * 0.5;
+      const maxV = moveSpeed * 1.1;
+      pacman.vx = Math.max(-maxV, Math.min(maxV, pacman.vx));
+      pacman.vy = Math.max(-maxV, Math.min(maxV, pacman.vy));
+
+      pacman.x += pacman.vx;
+      pacman.y += pacman.vy;
+
+      const drift = Math.min(speed * 0.5, 3.2);
+      pacman.x -= drift;
 
       pacman.y = Math.max(PAC_SIZE, Math.min(H - PAC_SIZE, pacman.y));
       pacman.x = Math.min(W - PAC_SIZE, pacman.x);
@@ -553,19 +588,43 @@
       return Math.sqrt(dx * dx + dy * dy) < r1 + r2;
     }
 
+    function playSound(freq, dur, type, vol) {
+      try {
+        const actx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.type = type || 'square';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(vol || 0.08, actx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+        osc.connect(gain);
+        gain.connect(actx.destination);
+        osc.start();
+        osc.stop(actx.currentTime + dur);
+      } catch (e) {}
+    }
+
+    function haptic(ms) {
+      if (navigator.vibrate) navigator.vibrate(ms);
+    }
+
     function update() {
-      if (state !== 'playing') return;
+      if (state !== 'playing' || paused) return;
 
       frameCount++;
+      if (graceTimer > 0) graceTimer--;
       difficultyTimer++;
 
-      speed = 3.5 + difficultyTimer * 0.002;
+      const maxSpeed = 8.5;
+      speed = 3.5 + (maxSpeed - 3.5) * (1 - Math.exp(-difficultyTimer * 0.0008));
 
       const newLevel = Math.floor((speed - 3.5) / 1.0) + 1;
       if (newLevel > speedLevel) {
         speedLevel = newLevel;
         speedUpBanner = true;
         speedUpBannerTimer = 90;
+        playSound(330, 0.1, 'square', 0.06);
+        setTimeout(() => playSound(440, 0.15, 'square', 0.08), 120);
       }
 
       if (speedUpBannerTimer > 0) speedUpBannerTimer--;
@@ -607,6 +666,9 @@
         mazeActive = false;
         score += 300 + mazeCount * 50;
         emitParticles(pacman.x, pacman.y, '#55ff55', 20);
+        playSound(440, 0.1, 'square', 0.08);
+        setTimeout(() => playSound(550, 0.1, 'square', 0.08), 100);
+        setTimeout(() => playSound(660, 0.15, 'square', 0.1), 200);
       }
 
       resolveMazeCollisions();
@@ -614,6 +676,8 @@
       if (pacman.x - PAC_SIZE <= 0) {
         emitParticles(pacman.x, pacman.y, '#ffff00', 25);
         shakeTimer = 20;
+        haptic(200);
+        playSound(100, 0.5, 'sawtooth', 0.15);
         lives = 0;
         endGame();
         return;
@@ -651,7 +715,8 @@
           continue;
         }
 
-        // collision
+        if (graceTimer > 0 || flashTimer > 0) continue;
+
         let hit = false;
         if (o.type === 'ghost') {
           hit = circleDist(pacman.x, pacman.y, PAC_SIZE * 0.7, o.x, o.y, o.w * 0.5);
@@ -663,11 +728,14 @@
           if (powerMode && o.type === 'ghost') {
             emitParticles(o.x, o.y, '#00ffff', 15);
             score += 200;
+            playSound(600, 0.15, 'square', 0.1);
             obstacles.splice(i, 1);
           } else {
             lives--;
             shakeTimer = 15;
-            flashTimer = 30;
+            flashTimer = 60;
+            haptic(100);
+            playSound(150, 0.3, 'sawtooth', 0.12);
             emitParticles(pacman.x, pacman.y, '#ffff00', 20);
             obstacles.splice(i, 1);
             if (lives <= 0) {
@@ -676,6 +744,8 @@
             }
             pacman.x = 200;
             pacman.y = H / 2;
+            pacman.vx = 0;
+            pacman.vy = 0;
             pacman.facing = 0;
             updateHUD();
           }
@@ -697,10 +767,13 @@
             powerMode = true;
             powerTimer = 300;
             emitParticles(d.x, d.y, '#cc0000', 12);
+            playSound(520, 0.12, 'square', 0.08);
+            setTimeout(() => playSound(780, 0.15, 'square', 0.08), 80);
             score += 50;
           } else {
             score += 10;
             emitParticles(d.x, d.y, '#d4a24e', 5);
+            playSound(440 + Math.random() * 200, 0.06, 'square', 0.04);
           }
           dots.splice(i, 1);
         }
@@ -1022,10 +1095,45 @@
       drawPacman();
       drawParticles();
 
+      // right-edge telegraph for incoming obstacles
+      obstacles.forEach(o => {
+        if (o.x > W - 40 && o.x < W + 60) {
+          const alpha = 0.5 * (1 - (o.x - W + 40) / 100);
+          if (alpha > 0) {
+            const oy = o.type === 'ghost' ? o.y : o.y + o.h / 2;
+            ctx.save();
+            ctx.globalAlpha = Math.min(alpha, 0.7);
+            ctx.fillStyle = o.type === 'ghost' ? '#ff4444' : '#4444ff';
+            ctx.beginPath();
+            ctx.moveTo(W, oy - 10);
+            ctx.lineTo(W - 12, oy);
+            ctx.lineTo(W, oy + 10);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+      });
+
       // power mode indicator
       if (powerMode) {
         ctx.fillStyle = `rgba(33, 33, 222, ${0.1 + Math.sin(frameCount * 0.1) * 0.05})`;
         ctx.fillRect(0, 0, W, H);
+      }
+
+      // grace period countdown
+      if (graceTimer > 0) {
+        const sec = Math.ceil(graceTimer / 30);
+        ctx.save();
+        ctx.globalAlpha = 0.6 + Math.sin(frameCount * 0.2) * 0.2;
+        ctx.font = 'bold 72px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffff00';
+        ctx.shadowColor = '#ffff00';
+        ctx.shadowBlur = 20;
+        ctx.fillText(sec > 0 ? sec.toString() : '¡YA!', W / 2, H / 2 - 40);
+        ctx.restore();
       }
 
       // speed up banner
@@ -1080,6 +1188,23 @@
         ctx.restore();
       }
 
+      // pause overlay
+      if (paused) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.font = 'bold 52px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffff00';
+        ctx.shadowColor = '#ffff00';
+        ctx.shadowBlur = 20;
+        ctx.fillText('PAUSA', W / 2, H / 2 - 20);
+        ctx.font = '20px "Courier New", monospace';
+        ctx.fillStyle = '#ccc';
+        ctx.shadowBlur = 0;
+        ctx.fillText('Tocá el canvas o presioná P / Esc', W / 2, H / 2 + 30);
+      }
+
       ctx.restore();
     }
 
@@ -1107,6 +1232,7 @@
     function endGame() {
       state = 'gameover';
       gameOver = true;
+      paused = false;
 
       const isNewHiScore = score > hiScore;
       if (isNewHiScore) {
@@ -1137,13 +1263,29 @@
 
     function loop() {
       if (state !== 'playing') return;
+      if (paused) return;
       update();
       draw();
       requestAnimationFrame(loop);
     }
 
     // Input
+    function togglePause() {
+      if (state !== 'playing') return;
+      paused = !paused;
+      if (!paused) {
+        draw();
+        loop();
+      } else {
+        draw();
+      }
+    }
+
     window.addEventListener('keydown', e => {
+      if ((e.key === 'p' || e.key === 'P' || e.key === 'Escape') && state === 'playing') {
+        togglePause();
+        return;
+      }
       keys[e.key] = true;
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
     });
@@ -1155,6 +1297,8 @@
     const isMobile = window.matchMedia('(pointer: coarse)').matches;
     if (isMobile) {
       document.querySelectorAll('.mobile-instructions').forEach(el => el.style.display = '');
+      const pauseBtn = document.getElementById('pause-btn');
+      if (pauseBtn) pauseBtn.style.display = '';
     }
 
     const joystickEl = document.getElementById('joystick');
@@ -1229,7 +1373,10 @@
       resetJoystick();
     });
 
-    canvas.addEventListener('touchstart', e => e.preventDefault());
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault();
+      if (state === 'playing') togglePause();
+    });
     canvas.addEventListener('touchmove', e => e.preventDefault());
 
     function tryFullscreen() {
