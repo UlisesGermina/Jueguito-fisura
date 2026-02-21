@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Pac-Run - El juego de Theo</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,11 +18,17 @@
     }
 
     #game-wrapper {
-      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 12px;
+    }
+
+    #game-area {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     #hud {
@@ -32,10 +38,15 @@
       color: #fff;
       font-size: 20px;
       padding: 0 4px;
+      margin-bottom: 6px;
     }
 
     #hud span { text-transform: uppercase; letter-spacing: 2px; }
     .hud-val { color: #ffff00; }
+
+    #canvas-container {
+      position: relative;
+    }
 
     canvas {
       border: 3px solid #2121de;
@@ -56,6 +67,7 @@
       z-index: 10;
       pointer-events: auto;
       border-radius: 6px;
+      overflow-y: auto;
     }
 
     #overlay.hidden { display: none; }
@@ -115,7 +127,6 @@
       position: relative;
       width: 160px;
       height: 160px;
-      margin-top: 10px;
       flex-shrink: 0;
     }
 
@@ -148,50 +159,118 @@
     #dpad .dpad-left  { top: 54px; left: 0; }
     #dpad .dpad-right { top: 54px; right: 0; }
 
-    @media (max-width: 850px) {
-      #hud {
-        width: 100vw;
-        font-size: 13px;
-        padding: 0 8px;
-        gap: 4px;
-      }
-      #hud span { letter-spacing: 0.5px; }
-      canvas {
-        width: 100vw;
-        height: auto;
-      }
-      #overlay h1 { font-size: 32px; }
-      #overlay h2 { font-size: 22px; }
-      #overlay p { font-size: 14px; padding: 0 12px; }
-      #overlay button { font-size: 16px; padding: 12px 30px; }
-      #overlay .key { padding: 1px 6px; font-size: 13px; }
-    }
-
     @media (pointer: coarse) {
       #dpad { display: block; }
       .desktop-instructions { display: none; }
+    }
+
+    /* Portrait mobile */
+    @media (pointer: coarse) and (orientation: portrait) {
+      #game-wrapper {
+        flex-direction: column;
+        width: 100vw;
+        gap: 8px;
+        padding: 8px 0;
+      }
+      #hud {
+        width: 100%;
+        font-size: 12px;
+        padding: 0 8px;
+      }
+      #hud span { letter-spacing: 0.5px; }
+      canvas {
+        width: calc(100vw - 16px);
+        height: auto;
+      }
+      #dpad {
+        margin-top: 6px;
+      }
+      #overlay h1 { font-size: 28px; }
+      #overlay h2 { font-size: 20px; }
+      #overlay p { font-size: 13px; padding: 0 10px; }
+      #overlay button { font-size: 15px; padding: 10px 24px; margin-top: 12px; }
+      #overlay .key { padding: 1px 5px; font-size: 12px; }
+    }
+
+    /* Landscape mobile */
+    @media (pointer: coarse) and (orientation: landscape) {
+      body {
+        align-items: center;
+        justify-content: center;
+      }
+      #game-wrapper {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        height: 100vh;
+        width: 100vw;
+        padding: 6px;
+      }
+      #game-area {
+        flex: 1;
+        height: 100%;
+        justify-content: center;
+        min-width: 0;
+      }
+      #hud {
+        width: 100%;
+        font-size: 11px;
+        padding: 0 4px;
+        margin-bottom: 3px;
+      }
+      #hud span { letter-spacing: 0; }
+      #canvas-container {
+        width: 100%;
+      }
+      canvas {
+        width: 100%;
+        height: auto;
+        max-height: calc(100vh - 36px);
+      }
+      #dpad {
+        width: 140px;
+        height: 140px;
+        flex-shrink: 0;
+      }
+      #dpad .dpad-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 20px;
+      }
+      #dpad .dpad-up    { top: 0; left: 48px; }
+      #dpad .dpad-down  { bottom: 0; left: 48px; }
+      #dpad .dpad-left  { top: 48px; left: 0; }
+      #dpad .dpad-right { top: 48px; right: 0; }
+      #overlay h1 { font-size: 24px; margin-bottom: 4px; }
+      #overlay h2 { font-size: 18px; margin-bottom: 8px; }
+      #overlay p { font-size: 12px; margin: 3px 0; padding: 0 10px; }
+      #overlay button { font-size: 14px; padding: 8px 20px; margin-top: 8px; }
+      #overlay .key { padding: 1px 4px; font-size: 11px; }
     }
   </style>
 </head>
 <body>
   <div id="game-wrapper">
-    <div id="hud">
-      <span>Puntos: <span class="hud-val" id="score-display">0</span></span>
-      <span>Record: <span class="hud-val" id="hi-score-display">0</span></span>
-      <span>Velocidad: <span class="hud-val" id="speed-display">1</span></span>
-      <span>Vidas: <span class="hud-val" id="lives-display">♥♥♥</span></span>
-    </div>
-    <div id="canvas-container" style="position:relative">
-    <canvas id="game" width="800" height="500"></canvas>
-    <div id="overlay">
-      <h1>PAC-RUN</h1>
-      <p style="font-size:22px; color:#ffff00; margin-bottom:8px">Dale Theo, vos podés!</p>
-      <p class="desktop-instructions">Usá <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> o <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> para moverte</p>
-      <p class="mobile-instructions" style="display:none">Usá los botones de abajo para moverte</p>
-      <p>Comé nuggets para sumar puntos — ¡los baldes de KFC te dan poderes!</p>
-      <p>Esquivá los fantasmas, Theo. Vos sabés.</p>
-      <p style="color:#ff4444; margin-top:10px">¡No dejes que la pared izquierda te aplaste!</p>
-      <button id="start-btn">Jugar</button>
+    <div id="game-area">
+      <div id="hud">
+        <span>Puntos: <span class="hud-val" id="score-display">0</span></span>
+        <span>Record: <span class="hud-val" id="hi-score-display">0</span></span>
+        <span>Velocidad: <span class="hud-val" id="speed-display">1</span></span>
+        <span>Vidas: <span class="hud-val" id="lives-display">♥♥♥</span></span>
+      </div>
+      <div id="canvas-container">
+        <canvas id="game" width="800" height="500"></canvas>
+        <div id="overlay">
+          <h1>PAC-RUN</h1>
+          <p style="font-size:22px; color:#ffff00; margin-bottom:8px">Dale Theo, vos podés!</p>
+          <p class="desktop-instructions">Usá <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> o <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> para moverte</p>
+          <p class="mobile-instructions" style="display:none">Usá los botones para moverte</p>
+          <p>Comé nuggets para sumar puntos — ¡los baldes de KFC te dan poderes!</p>
+          <p>Esquivá los fantasmas, Theo. Vos sabés.</p>
+          <p style="color:#ff4444; margin-top:10px">¡No dejes que la pared izquierda te aplaste!</p>
+          <button id="start-btn">Jugar</button>
+        </div>
+      </div>
     </div>
     <div id="dpad">
       <div class="dpad-btn dpad-up" data-dir="ArrowUp">▲</div>
@@ -1058,10 +1137,11 @@
         <p>Puntos: <strong style="color:#ffff00">${score}</strong></p>
         <p>Tu récord: <strong style="color:#ffff00">${hiScore}</strong></p>
         <p>Nivel de velocidad: <strong style="color:#ff4444">${speedLevel}</strong></p>
-        <p style="color:#66ddff; margin-top:16px; font-style:italic; max-width:500px; line-height:1.5">${msg}</p>
+        <p style="color:#66ddff; margin-top:12px; font-style:italic; max-width:90%; line-height:1.4">${msg}</p>
         <button id="restart-btn">Dale de nuevo</button>
       `;
       document.getElementById('restart-btn').addEventListener('click', () => {
+        if (isMobile) tryFullscreen();
         init();
         loop();
       });
@@ -1111,7 +1191,17 @@
     canvas.addEventListener('touchstart', e => e.preventDefault());
     canvas.addEventListener('touchmove', e => e.preventDefault());
 
+    function tryFullscreen() {
+      const el = document.documentElement;
+      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    }
+
     startBtn.addEventListener('click', () => {
+      if (isMobile) tryFullscreen();
       init();
       loop();
     });
