@@ -1090,14 +1090,6 @@
       ctx.shadowColor = bodyColor;
       ctx.shadowBlur = 12 * SHADOW_MULT;
 
-      // Semi-transparent bottom
-      const grad = ctx.createLinearGradient(0, -r, 0, r);
-      grad.addColorStop(0, bodyColor);
-      grad.addColorStop(0.7, bodyColor);
-      grad.addColorStop(1, bodyColor.replace(')', ', 0.4)').replace('rgb', 'rgba').replace('#', ''));
-      // Fallback to solid since hex doesn't convert cleanly
-      ctx.fillStyle = bodyColor;
-
       ctx.beginPath();
       ctx.arc(0, -r * 0.2, r, Math.PI, 0);
       ctx.lineTo(r, r * 0.8);
