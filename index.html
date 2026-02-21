@@ -16,7 +16,8 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
+      height: 100vh;
+      height: 100dvh;
       font-family: 'Press Start 2P', 'Courier New', monospace;
       overflow: hidden;
       touch-action: manipulation;
@@ -27,6 +28,8 @@
       flex-direction: column;
       align-items: center;
       gap: 12px;
+      max-height: 100vh;
+      max-height: 100dvh;
     }
 
     #game-area {
@@ -34,6 +37,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      min-height: 0;
     }
 
     #hud {
@@ -229,31 +233,35 @@
       .hud-btn { display: flex; }
     }
 
-    @media (pointer: coarse) and (orientation: portrait) {
-      #game-wrapper { flex-direction: column; width: 100vw; gap: 8px; padding: 8px 0; }
-      #hud { width: 100%; font-size: 8px; padding: 0 8px; }
-      #hud span { letter-spacing: 0.5px; }
-      canvas { width: calc(100vw - 16px); height: auto; }
-      #overlay h1 { font-size: 20px; }
-      #overlay h2 { font-size: 14px; }
-      #overlay p { font-size: 9px; padding: 0 10px; }
-      #overlay button { font-size: 11px; padding: 10px 24px; margin-top: 12px; }
-      #overlay .key { padding: 1px 5px; font-size: 8px; }
-    }
-
-    @media (pointer: coarse) and (orientation: landscape) {
-      body { align-items: center; justify-content: center; }
-      #game-wrapper { flex-direction: column; align-items: center; height: 100vh; width: 100vw; padding: 6px; gap: 4px; }
-      #game-area { flex: 1; height: 100%; justify-content: center; min-width: 0; width: 100%; }
-      #hud { width: 100%; font-size: 8px; padding: 0 4px; margin-bottom: 3px; }
+    @media (pointer: coarse) {
+      body { height: 100vh; height: 100dvh; padding: 0; }
+      #game-wrapper {
+        width: 100vw;
+        height: 100vh; height: 100dvh;
+        max-height: 100vh; max-height: 100dvh;
+        padding: 4px;
+        gap: 2px;
+        justify-content: center;
+      }
+      #game-area { flex: 1; min-height: 0; width: 100%; }
+      #canvas-container { width: 100%; height: 100%; }
+      canvas {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        max-width: 100%;
+        max-height: 100%;
+      }
+      #hud { width: 100%; font-size: 7px; padding: 0 6px; margin-bottom: 2px; flex-shrink: 0; }
       #hud span { letter-spacing: 0; }
-      #canvas-container { width: 100%; }
-      canvas { width: 100%; height: auto; max-height: calc(100vh - 36px); }
+      #overlay { padding: 8px; }
       #overlay h1 { font-size: 18px; margin-bottom: 4px; }
-      #overlay h2 { font-size: 12px; margin-bottom: 8px; }
-      #overlay p { font-size: 8px; margin: 3px 0; padding: 0 10px; }
-      #overlay button { font-size: 10px; padding: 8px 20px; margin-top: 8px; }
-      #overlay .key { padding: 1px 4px; font-size: 8px; }
+      #overlay h2 { font-size: 11px; margin-bottom: 6px; }
+      #overlay p { font-size: 8px; margin: 2px 0; padding: 0 12px; line-height: 1.4; }
+      #overlay button { font-size: 11px; padding: 10px 28px; margin-top: 8px; }
+      #overlay .key { padding: 1px 4px; font-size: 7px; }
+      #overlay .share-btn { font-size: 9px; padding: 8px 20px; margin-top: 6px; }
+      .hide-mobile { display: none !important; }
     }
   </style>
 </head>
@@ -282,12 +290,11 @@
           <p style="font-size:14px; color:#ffff00; margin-bottom:8px">Dale Theo, vos podés!</p>
           <p class="desktop-instructions">Usá <span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span> o <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> para moverte</p>
           <p class="mobile-instructions" style="display:none">Usá el joystick para moverte</p>
-          <p>Comé nuggets para sumar puntos</p>
-          <p>¡Los baldes de KFC te dan poderes!</p>
+          <p class="hide-mobile">Comé nuggets para sumar puntos</p>
+          <p class="hide-mobile">¡Los baldes de KFC te dan poderes!</p>
           <p>Esquivá los fantasmas, Theo. Vos sabés.</p>
-          <p style="color:#ff4444; margin-top:10px">¡No dejes que la pared izquierda te aplaste!</p>
+          <p style="color:#ff4444">¡No dejes que la pared te aplaste!</p>
           <p class="desktop-instructions" style="color:#888; margin-top:6px"><span class="key">P</span> o <span class="key">Esc</span> para pausar</p>
-          <p class="mobile-instructions" style="display:none; color:#888; margin-top:6px">Usá el botón ⏸ para pausar</p>
           <button id="start-btn">Jugar</button>
         </div>
       </div>
