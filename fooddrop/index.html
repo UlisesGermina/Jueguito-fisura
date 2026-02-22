@@ -108,7 +108,8 @@
       <div id="overlay">
         <h1>FOOD DROP</h1>
         <p style="font-size:12px; color:#ffff00; margin-bottom:6px">¡Atrapá la comida, Theo!</p>
-        <p>Movete con ← → o arrastrá el dedo</p>
+        <p>Tocá o presioná ← → para cambiar de dirección</p>
+        <p style="color:#ffaa00; font-size:7px">¡El plato no para nunca!</p>
         <p>Agarrá la comida 🍕🍔🌮🍩</p>
         <p style="color:#ff4444">¡Evitá las bombas! 💣</p>
         <button id="play-btn">Jugar</button>
@@ -179,7 +180,7 @@
       shakeTimer = 0;
       flashTimer = 0;
       starChance = 0.03;
-      player = { x: W / 2, w: 50, h: 40 };
+      player = { x: W / 2, w: 50, h: 40, dir: 1 };
       overlay.classList.add('hidden');
       updateHUD();
     }
@@ -338,6 +339,16 @@
       ctx.ellipse(0, 2, hw - 5, 6, 0, 0, Math.PI);
       ctx.fill();
 
+      // Direction arrow
+      const arrowX = player.dir * 18;
+      ctx.fillStyle = 'rgba(255,255,0,0.6)';
+      ctx.beginPath();
+      ctx.moveTo(arrowX + player.dir * 6, -2);
+      ctx.lineTo(arrowX - player.dir * 3, -6);
+      ctx.lineTo(arrowX - player.dir * 3, 2);
+      ctx.closePath();
+      ctx.fill();
+
       ctx.restore();
     }
 
@@ -480,57 +491,37 @@
       requestAnimationFrame(raf);
     }
 
-    // --- Controls ---
-    const keys = {};
+    // --- Controls: always moving, input only flips direction ---
     window.addEventListener('keydown', e => {
-      keys[e.key] = true;
-      if (['ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+      if (state !== 'playing') return;
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { player.dir = -1; e.preventDefault(); }
+      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { player.dir = 1; e.preventDefault(); }
     });
-    window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-    let touchX = null;
     canvas.addEventListener('touchstart', e => {
       e.preventDefault();
-      touchX = e.touches[0].clientX;
-    }, { passive: false });
-    canvas.addEventListener('touchmove', e => {
-      e.preventDefault();
-      if (touchX === null) return;
-      const nx = e.touches[0].clientX;
-      const rect = canvas.getBoundingClientRect();
-      const relX = (nx - rect.left) / rect.width * W;
-      player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, relX));
-      touchX = nx;
-    }, { passive: false });
-    canvas.addEventListener('touchend', () => { touchX = null; }, { passive: false });
-    canvas.addEventListener('touchcancel', () => { touchX = null; }, { passive: false });
-
-    canvas.addEventListener('mousemove', e => {
       if (state !== 'playing') return;
       const rect = canvas.getBoundingClientRect();
-      const relX = (e.clientX - rect.left) / rect.width * W;
-      player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, relX));
+      const tx = e.touches[0].clientX - rect.left;
+      player.dir = tx < rect.width / 2 ? -1 : 1;
+    }, { passive: false });
+    canvas.addEventListener('touchmove', e => { e.preventDefault(); }, { passive: false });
+
+    canvas.addEventListener('click', e => {
+      if (state !== 'playing') return;
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      player.dir = cx < rect.width / 2 ? -1 : 1;
     });
 
-    // Keyboard movement in update
-    const origUpdate = update;
-    const wrappedUpdate = function() {
-      if (state === 'playing') {
-        const spd = 6 + level * 0.3;
-        if (keys['ArrowLeft'] || keys['a'] || keys['A']) player.x -= spd;
-        if (keys['ArrowRight'] || keys['d'] || keys['D']) player.x += spd;
-        player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
-      }
-      origUpdate();
-    };
-    // Patch
+    // Auto-movement + bounce off walls
     const _origUpdate = update;
     update = function() {
       if (state === 'playing') {
-        const spd = 6 + level * 0.3;
-        if (keys['ArrowLeft'] || keys['a'] || keys['A']) player.x -= spd;
-        if (keys['ArrowRight'] || keys['d'] || keys['D']) player.x += spd;
-        player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
+        const spd = 3.5 + level * 0.3;
+        player.x += player.dir * spd;
+        if (player.x <= player.w / 2) { player.x = player.w / 2; player.dir = 1; }
+        if (player.x >= W - player.w / 2) { player.x = W - player.w / 2; player.dir = -1; }
       }
       _origUpdate();
     };
